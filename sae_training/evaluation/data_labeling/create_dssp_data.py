@@ -5,18 +5,16 @@ from Bio.PDB import PDBParser, DSSP, PPBuilder
 import Bio.PDB.Polypeptide as polypep
 import pandas as pd
 import warnings
-from pdbfixer import PDBFixer
-from openmm.app import PDBFile
 from natsort import natsorted
 import numpy as np
+import glob
 
 warnings.filterwarnings("ignore")
 
 # === Update your paths ===
-input_pdb_dir = Path("/home/neelm/data/ProteinMPNN-copy/sae_training/evaluation/inputs/")   # PDBs from .pt conversion
-dssp_dir = Path("/home/neelm/data/ProteinMPNN-copy/sae_training/evaluation/data_labeling/dssp_data")
-dssp_dir.mkdir(parents=True, exist_ok=True)
-
+input_pdb_dir = Path('/WAVE/bio/ML/SAE_train/SAEProteinMPNN/sae_training/evaluation/inputs')   # PDBs from .pt conversion
+dssp_dir = "dssp_data"
+#dssp_dir.mkdir(parents=True, exist_ok=True)
 results = []
 chain_letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J','K', 'L']
 
@@ -37,9 +35,10 @@ def run_dssp(pdb_path):
             old_index = idx
         else:
             old_index = idx
-        didx, aa, ss, acc, phi, psi, h_bond_energy = (
+        didx, aa, ss, acc, phi, psi, NO1, ON1, NO2, ON2 = (
             dssp[key][0], dssp[key][1], dssp[key][2], dssp[key][3],
-            dssp[key][4], dssp[key][5], dssp[key][10]
+            dssp[key][4], dssp[key][5], dssp[key][7], dssp[key][9],
+            dssp[key][11], dssp[key][13]
         )
         results.append({
             "identifier": f"{pdb_path.name[:-4]}{chain_letters[chain]}{idx}",
@@ -48,13 +47,19 @@ def run_dssp(pdb_path):
             "ASA": acc,
             "phi": phi,
             "psi": psi,
-            "h_bond_energy": h_bond_energy
+            "NO1": NO1,
+            "ON1": ON1,
+            "NO2": NO2,
+            "ON2": ON2
         })
-    print(len(indexes))
+    #print(len(indexes))
 
+#run_dssp(Path('/WAVE/bio/ML/SAE_train/SAEProteinMPNN/sae_training/evaluation/inputs/1abn.pdb'))
+#print('test')
 # === Run pipeline on all PDBs ===
-pdb_files = list(input_pdb_dir.glob("*.pdb"))
-pdb_files = [Path(p) for p in natsorted([str(p) for p in pdb_files ])]
+pdb_files = list(input_pdb_dir.glob('*.pdb'))
+#print(pdb_files)
+pdb_files = [Path(p) for p in natsorted([str(p) for p in pdb_files])]
 pdb_files = pdb_files
 for pdb_file in pdb_files:
     print(pdb_file.name)
@@ -62,10 +67,19 @@ for pdb_file in pdb_files:
 
 # === Save to CSV ===
 def normalize(arr):
+    arr = pd.to_numeric(arr, errors='coerce')
+    min_val = arr.min(skipna=True)
+    max_val = arr.max(skipna=True)
+
+    if max_val != min_val:
+        normalized_col = (arr - min_val)/(max_val - min_val)
+    else:
+        normalized_col = (arr - min_val)
+    '''    
     for j in range(arr.shape[0]):
         if arr.iloc[j] == 'NA':
-            print(arr.iloc[j])
-            print(type(arr.iloc[j]))
+            #print(arr.iloc[j])
+            #print(type(arr.iloc[j]))
             arr.iloc[j] = float('nan')
     max_val = arr.max()
     min_val = arr.min()
@@ -74,16 +88,20 @@ def normalize(arr):
         normalized_col = (arr - min_val)/(max_val - min_val)
     else:
         normalized_col = (arr - min_val)
+    normalized_col = pd.to_numeric(normalized_col, errors='coerce').round(5)
+    '''
 
-    normalized_col = round(normalized_col, 5)
-
-    return normalized_col
+    return normalized_col.round(5)
 
 def categorize_angles(arr):
+    arr = pd.to_numeric(arr, errors='coerce')
+    arr = (arr +360) % 360
+    arr = np.where(arr > 180, 360 - arr, arr)
+    '''
     for j in range(arr.shape[0]):
         if not isinstance(arr.iloc[j], float):
-            print(arr.iloc[j])
-            print(type(arr.iloc[j]))
+            #print(arr.iloc[j])
+            #print(type(arr.iloc[j]))
             arr.iloc[j] = np.nan
     for j in range(arr.shape[0]):
         arr += 360
@@ -92,9 +110,9 @@ def categorize_angles(arr):
         if float(arr.iloc[j]) > 180:
             arr.iloc[j] = 360 - float(arr.iloc[j])
 
-    normalized_col = arr/180
-
-    return round(normalized_col, 5)
+    normalized_col = pd.to_numeric(arr/180, errors='coerce').round(5)
+    '''
+    return pd.Series(arr).round(5)
 
 df = pd.DataFrame(results)
 
@@ -104,18 +122,37 @@ df = pd.DataFrame(results)
 arr = df['ASA']
 norm_arr = normalize(arr)
 df['ASA'] = norm_arr
+print("ASA normalized")
 
-arr = df['h_bond_energy']
+arr = df['NO1']
 norm_arr = normalize(arr)
-df['h_bond_energy'] = norm_arr
+df['NO1'] = norm_arr
+print('NO1 normalized')
+
+arr = df['ON1']
+norm_arr = normalize(arr)
+df['ON1'] = norm_arr
+print('ON1 normalized')
+
+arr = df['NO2']
+norm_arr = normalize(arr)
+df['NO2'] = norm_arr
+print('NO2 normalized')
+
+arr = df['ON2']
+norm_arr = normalize(arr)
+df['ON2'] = norm_arr
+print('ON2 normalized')
 
 arr = df['phi']
 norm_arr = categorize_angles(arr)
 df['phi'] = norm_arr
+print('phi normalized')
 
 arr = df['psi']
 norm_arr = categorize_angles(arr)
 df['psi'] = norm_arr
+print('psi normalized')
 
 df.to_csv("dssp_summary.csv", index=False)
 print(f"✅ DSSP data saved to dssp_summary.csv with {len(df)} rows.")

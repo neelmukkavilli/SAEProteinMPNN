@@ -48,7 +48,7 @@ class StructureDataset():
     def __getitem__(self, idx):
         return self.data[idx]
 '''
-
+'''
 # Alternative ChatGPT option
 class StructureDataset():
     def __init__(self, pdb_dict_iter, verbose=True, truncate=None, max_length=100,
@@ -91,9 +91,9 @@ class StructureDataset():
 
     def __getitem__(self, idx):
         return self.data[idx]
-
-# Original
 '''
+# Original
+
 class StructureDataset():
     def __init__(self, pdb_dict_list, verbose=True, truncate=None, max_length=100,
         alphabet='ACDEFGHIKLMNPQRSTVWYX'):
@@ -134,7 +134,7 @@ class StructureDataset():
 
     def __getitem__(self, idx):
         return self.data[idx]
-'''
+
 
 class StructureLoader():
     def __init__(self, dataset, batch_size=100, shuffle=True,
@@ -228,6 +228,7 @@ def get_pdbs(data_loader, max_length=10000):
             mask_list = []
             visible_list = []
 
+            #print("Check 4.01")
             if len(list(np.unique(t['idx']))) < 352:
                 for idx in list(np.unique(t['idx'])):
                     letter = chain_alphabet[idx]
@@ -280,8 +281,8 @@ def get_pdbs(data_loader, max_length=10000):
                         coords_dict_chain['CA_chain_'+letter] = all_atoms[:, 1, :].tolist()
                         coords_dict_chain['C_chain_'+letter] = all_atoms[:, 2, :].tolist()
                         coords_dict_chain['O_chain_'+letter] = all_atoms[:, 3, :].tolist()
-                        my_dict['coords_chain'+letter] = coords_dict_chain
-
+                        my_dict['coords_chain_'+letter] = coords_dict_chain
+                #print("Check 4.02")
                 my_dict['name'] = t['label']
                 my_dict['masked_list'] = mask_list
                 my_dict['visible_list'] = visible_list
@@ -293,7 +294,7 @@ def get_pdbs(data_loader, max_length=10000):
 
 
 # Original
-def get_pdbs(data_loader, repeat=1, max_length=10000, num_units=1000000):
+def get_pdbs_old(data_loader, repeat=1, max_length=10000, num_units=1000000):
     init_alphabet = ['A', 'B', 'C', 'D', 'E', 'F', 'G','H', 'I', 'J','K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T','U', 'V','W','X', 'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f', 'g','h', 'i', 'j','k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't','u', 'v','w','x', 'y', 'z']
     extra_alphabet = [str(item) for item in list(np.arange(300))]
     chain_alphabet = init_alphabet + extra_alphabet

@@ -58,6 +58,7 @@ def create_labels(pdb_file_path):
     pdb_name = pdb_file_path.split('/')[-1].split('.')[0]  # Extract name from file path
     count = 0
     res_prev = 0
+    error = False
     for line in open(pdb_file_path, "r"):
             #line = line.decode("utf-8","ignore").rstrip()
         #if count < 200:
@@ -66,31 +67,35 @@ def create_labels(pdb_file_path):
                 line = line.replace("MSE","MET")
             if line.startswith("ATOM"):
                 chain_id = line[21:22]
-                res_id = int(line[22:22+5].strip())
-                if res_id > res_prev + 1 and count == 0:
-                    residue_key = f"{pdb_name}{chain_id}{res_id}"
-                    residues.add(residue_key)
-                    res_prev = res_id
-                elif res_id == res_prev + 1:
-                    residue_key = f"{pdb_name}{chain_id}{res_id}"
-                    residues.add(residue_key)
-                    res_prev = res_id
-                if res_id == res_prev:
-                    a = 1
-                if res_id > res_prev + 1 and count != 0:
-                    for i in range(res_prev, res_id - 1):
-                        new_res = i + 1
+                try:
+                    res_id = int(line[22:22+5].strip())
+                    if res_id > res_prev + 1 and count == 0:
                         residue_key = f"{pdb_name}{chain_id}{res_id}"
                         residues.add(residue_key)
-                if res_id < res_prev:
-                    count = 0
-                else:
-                    residue_key = f"{pdb_name}{chain_id}{res_id}"
-                    residues.add(residue_key)
-                res_prev = res_id
-                count += 1
+                        res_prev = res_id
+                    elif res_id == res_prev + 1:
+                        residue_key = f"{pdb_name}{chain_id}{res_id}"
+                        residues.add(residue_key)
+                        res_prev = res_id
+                    if res_id == res_prev:
+                        a = 1
+                    if res_id > res_prev + 1 and count != 0:
+                        for i in range(res_prev, res_id - 1):
+                            new_res = i + 1
+                            residue_key = f"{pdb_name}{chain_id}{res_id}"
+                            residues.add(residue_key)
+                    if res_id < res_prev:
+                        count = 0
+                    else:
+                        residue_key = f"{pdb_name}{chain_id}{res_id}"
+                        residues.add(residue_key)
+                    res_prev = res_id
+                    count += 1
+                except ValueError:
+                    print("weirdness")
+                    error = True
     #print(residues)
-    return sorted(list(residues), key=lambda x: (x[len(pdb_name)], int(x[len(pdb_name)+1:])))#, int(x[len(pdb_name)+1:], int(x[len(pdb_name)])))) 
+    return error, sorted(list(residues), key=lambda x: (x[len(pdb_name)], int(x[len(pdb_name)+1:])))#, int(x[len(pdb_name)+1:], int(x[len(pdb_name)])))) 
 
 def parse_PDB_biounits(x, atoms=['N','CA','C'], chain=None):
   '''
@@ -692,10 +697,15 @@ class EncLayer(nn.Module):
         self.W3 = nn.Linear(num_hidden, num_hidden, bias=True)
         
         # SAE Layers
-        self.requires_grad_(True)
+        #self.requires_grad_(True)
         self.SAE_act = nn.ReLU()
         self.WS1 = nn.Linear(num_hidden, num_hidden*8, bias=True)
         self.WS2 = nn.Linear(num_hidden*8, num_hidden, bias=True)
+
+        #nn.init.kaiming_uniform_(self.WS1.weight, nonlinearity='leaky_relu')
+        #nn.init.constant_(self.WS1.bias, 0)
+        #nn.init.kaiming_uniform_(self.WS2.weight, nonlinearity='leaky_relu')
+        #nn.init.constant_(self.WS2.bias, 0)
 
         # Edge Layers
         self.W11 = nn.Linear(num_hidden + num_in, num_hidden, bias=True)
@@ -723,6 +733,11 @@ class EncLayer(nn.Module):
             mask_V = mask_V.unsqueeze(-1)
             h_V = mask_V * h_V
 
+        # SAE Part
+        encoded = self.SAE_act(self.WS1(h_V - self.WS2.bias))
+        h_V, h_V_original = self.WS2(encoded), h_V
+        #print(h_V.shape)
+
         h_EV = cat_neighbors_nodes(h_V, h_E, E_idx)
         h_V_expand = h_V.unsqueeze(-2).expand(-1,-1,h_EV.size(-2),-1)
         h_EV = torch.cat([h_V_expand, h_EV], -1)
@@ -730,36 +745,42 @@ class EncLayer(nn.Module):
         h_E = self.norm3(h_E + self.dropout3(h_message))
         
         # SAE Part
-        encoded = self.SAE_act(self.WS1(h_V - self.WS2.bias))
-        h_V_decoded = self.WS2(encoded)
-
+        #encoded = self.SAE_act(self.WS1(h_V - self.WS2.bias))
+        #h_V_decoded = self.WS2(encoded)
+        '''
         if encoded.shape[2] == 1024:
             
             # Original Graph
             h_V_graph = np.array(h_V.numpy()[0, :, :])
-            h_V_graph = normalize(h_V_graph)
             print(h_V_graph.shape)
+            h_V_graph = normalize(h_V_graph)
+            #print(h_V_graph.shape)
             imgO = plt.imshow(h_V_graph)
-            plt.colorbar(imgO)
+            #plt.colorbar(imgO)
+            plt.savefig("h_V_decoded.png")
             plt.show()
 
             # New Graph
-            h_V_decoded_graph = np.array(h_V_decoded.numpy()[0, :, :])
-            h_V_decoded_graph = normalize(h_V_decoded_graph)
-            print(h_V_decoded_graph.shape)
-            imgD = plt.imshow(h_V_decoded_graph)
-            plt.colorbar(imgD)
+            h_V_original_graph = np.array(h_V_original.numpy()[0, :, :])
+            h_V_original_graph = normalize(h_V_original_graph)
+            #print(h_V_decoded_graph.shape)
+            imgD = plt.imshow(h_V_original_graph)
+            #plt.colorbar(imgD)
+            plt.savefig("h_V_original_graph.png")
             plt.show()
 
-            encoded_graph = np.array(encoded.numpy()[0, :, :128])
+            encoded_graph = np.array(encoded.numpy()[0, :, :256])
             encoded_graph = normalize(encoded_graph)
-            print(encoded_graph.shape)
+            activation_counts = np.all(encoded_graph==0, axis=0)
+            dead_neurons = (activation_counts == 1).sum()
+            print(f"Dead neurons: {dead_neurons}/{encoded.shape[2]}")
+            #print(encoded_graph.shape)
             imgE = plt.imshow(encoded_graph,)
-            plt.colorbar(imgE)
+           # plt.colorbar(imgE)
+            plt.savefig("encoded.png")
             plt.show()
-            
-
-        return h_V, h_E, h_V_decoded, encoded
+            '''        
+        return h_V, h_E, h_V_original, encoded              
 
 
 class PositionWiseFeedForward(nn.Module):
@@ -1016,7 +1037,7 @@ class ProteinFeatures(nn.Module):
     def forward(self, X, mask, residue_idx, chain_labels):
         if self.augment_eps > 0:
             X = X + self.augment_eps * torch.randn_like(X)
-        print("X", X.shape)
+        #print("X", X.shape)
         b = X[:,:,1,:] - X[:,:,0,:]
         c = X[:,:,2,:] - X[:,:,1,:]
         a = torch.cross(b, c, dim=-1)

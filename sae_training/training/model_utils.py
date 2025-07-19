@@ -48,7 +48,8 @@ def featurize(batch, device):
             # Skip if essential keys are missing
             if seq_key not in b or coords_key not in b:
                 print(f"[WARNING] Missing keys for chain {letter} in entry: {b.get('name', 'unknown')}. Skipping chain.")
-                continue
+            else:
+                print("fine")
             
             chain_seq = b[seq_key]
             chain_length = len(chain_seq)
@@ -106,7 +107,8 @@ def featurize(batch, device):
                 residue_idx[i, l0:l1] = 100*(c-1)+np.arange(l0, l1)
                 l0 += chain_length
                 c+=1
-            elif letter in masked_chains: 
+            elif letter in masked_chains:
+                #print(b.keys()) 
                 chain_seq = b[f'seq_chain_{letter}']
                 chain_length = len(chain_seq)
                 chain_coords = b[f'coords_chain_{letter}'] #this is a dictionary
@@ -228,14 +230,14 @@ class EncLayer(nn.Module):
         self.W3 = nn.Linear(num_hidden, num_hidden, bias=True)
         
         # SAE Layers
-        self.SAE_act = nn.ReLU()
+        self.SAE_act = nn.LeakyReLU()
         self.WS1 = nn.Linear(num_hidden, num_hidden*8, bias=True)
         self.WS2 = nn.Linear(num_hidden*8, num_hidden, bias=True)
-        
-        #self.WS1.bias.requires_grad = True
-        #self.WS1.weight.requires_grad = True
-        #self.WS2.bias.requires_grad = True
-        #self.WS2.weight.requires_grad = True
+
+        nn.init.kaiming_uniform_(self.WS1.weight, nonlinearity='leaky_relu')
+        nn.init.constant_(self.WS1.bias, 0)
+        nn.init.kaiming_uniform_(self.WS2.weight, nonlinearity='leaky_relu')
+        nn.init.constant_(self.WS2.bias, 0)
 
         # Edge Layers
         self.W11 = nn.Linear(num_hidden + num_in, num_hidden, bias=True)
@@ -251,6 +253,7 @@ class EncLayer(nn.Module):
         h_V_expand = h_V.unsqueeze(-2).expand(-1,-1,h_EV.size(-2),-1)
         h_EV = torch.cat([h_V_expand, h_EV], -1)
         h_message = self.W3(self.act(self.W2(self.act(self.W1(h_EV)))))
+        
         if mask_attend is not None:
             h_message = mask_attend.unsqueeze(-1) * h_message
         dh = torch.sum(h_message, -2) / self.scale
@@ -262,17 +265,16 @@ class EncLayer(nn.Module):
             mask_V = mask_V.unsqueeze(-1)
             h_V = mask_V * h_V
 
+        # SAE Part
+        encoded = self.SAE_act(self.WS1(h_V - self.WS2.bias))
+        h_V, h_V_original = self.WS2(encoded), h_V
+
         h_EV = cat_neighbors_nodes(h_V, h_E, E_idx)
         h_V_expand = h_V.unsqueeze(-2).expand(-1,-1,h_EV.size(-2),-1)
         h_EV = torch.cat([h_V_expand, h_EV], -1)
         h_message = self.W13(self.act(self.W12(self.act(self.W11(h_EV)))))
         h_E = self.norm3(h_E + self.dropout3(h_message))
         
-        # SAE Part
-        encoded = self.SAE_act(self.WS1(h_V - self.WS2.bias))
-        h_V, h_V_original = self.WS2(encoded), h_V
-        #print("h_V_original", h_V_original.requires_grad)
-        #print("encoded", encoded.requires_grad)
         return h_V, h_E, h_V_original, encoded
 
 
@@ -474,7 +476,7 @@ class ProteinMPNN(nn.Module):
 
         for p in self.parameters():
             if p.dim() > 1:
-                nn.init.xavier_uniform_(p)
+                nn.init.kaiming_normal_(p)
 
     def forward(self, X, S, mask, chain_M, residue_idx, chain_encoding_all):
         """ Graph-conditioned sequence model """
@@ -487,9 +489,16 @@ class ProteinMPNN(nn.Module):
         # Encoder is unmasked self-attention
         mask_attend = gather_nodes(mask.unsqueeze(-1),  E_idx).squeeze(-1)
         mask_attend = mask.unsqueeze(-1) * mask_attend
+        
+        self.input_act= []
+        self.encoded_act = []
+        self.output_act = []
         for layer in self.encoder_layers:
             h_V, h_E, h_V_original, encoded = torch.utils.checkpoint.checkpoint(layer, h_V, h_E, E_idx, mask, mask_attend, use_reentrant=True)
-        #print("encoder ran")
+            self.input_act.append(h_V_original)
+            self.encoded_act.append(encoded)
+            self.output_act.append(h_V)
+
         # Concatenate sequence embeddings for autoregressive decoder
         h_S = self.W_s(S)
         h_ES = cat_neighbors_nodes(h_S, h_E, E_idx)
@@ -510,22 +519,13 @@ class ProteinMPNN(nn.Module):
         mask_fw = mask_1D * (1. - mask_attend)
 
         h_EXV_encoder_fw = mask_fw * h_EXV_encoder
-        #print("decoder about to run")
         h_V_from_encoder = h_V
-        #print("h_V from encoder", h_V_from_encoder.requires_grad)
-        #print("could save h_V")
         for layer in self.decoder_layers:
             h_ESV = cat_neighbors_nodes(h_V, h_ES, E_idx)
-            #print("cat")
-            #print(mask_bw.shape, h_ESV.shape, h_EXV_encoder_fw.shape)
             h_ESV = mask_bw * h_ESV + h_EXV_encoder_fw
-            #print("everything except checkpoint")
             h_V = torch.utils.checkpoint.checkpoint(layer, h_V, h_ESV, mask, use_reentrant=True)
-            #print("layer finished")
-        #print("decoder ran")
         logits = self.W_out(h_V)
         log_probs = F.log_softmax(logits, dim=-1)
-        #print("model finished")
         return log_probs, h_V_from_encoder, h_V_original, encoded
         
 

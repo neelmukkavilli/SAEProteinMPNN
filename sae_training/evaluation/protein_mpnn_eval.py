@@ -3,7 +3,6 @@ import os.path
 import pandas as pd
 
 def main(args):
-
     import json, time, os, sys, glob
     import shutil
     import warnings
@@ -18,7 +17,7 @@ def main(args):
     import random
     import os.path
     import subprocess
-    
+    import matplotlib.pyplot as plt
     from protein_mpnn_utils import loss_nll, loss_smoothed, gather_edges, gather_nodes, gather_nodes_t, cat_neighbors_nodes, _scores, _S_to_seq, tied_featurize, parse_PDB, parse_fasta, create_labels
     from protein_mpnn_utils import StructureDataset, StructureDatasetPDB, ProteinMPNN
     if args.seed:
@@ -33,7 +32,7 @@ def main(args):
     hidden_dim = 128
     num_layers = 3 
   
-    print(args.model_name)
+    #print(args.model_name)
     if args.path_to_model_weights:
         model_folder_path = args.path_to_model_weights
         if model_folder_path[-1] != '/':
@@ -178,9 +177,16 @@ def main(args):
 
     checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)#("/home/neelm/data/ProteinMPNN-copy/training/exp_020/model_weights/epoch_last.pt", weights_only=False) 
     noise_level_print = checkpoint['noise_level']
-    model = ProteinMPNN(num_letters=21, node_features=hidden_dim, edge_features=hidden_dim, hidden_dim=hidden_dim,num_encoder_layers=num_layers, num_decoder_layers=num_layers, augment_eps=args.backbone_noise, k_neighbors=checkpoint['num_edges'])
+    model = ProteinMPNN(num_letters=21,
+                        node_features=hidden_dim,
+                        edge_features=hidden_dim, 
+                        hidden_dim=hidden_dim,
+                        num_encoder_layers=num_layers, 
+                        num_decoder_layers=num_layers, 
+                        augment_eps=args.backbone_noise, 
+                        k_neighbors=checkpoint['num_edges'])
     model.to(device)
-    model.load_state_dict(checkpoint, strict=False)
+    model.load_state_dict(checkpoint['model_state_dict'], strict=False)
     model.eval()
 
     if print_all:
@@ -219,7 +225,7 @@ def main(args):
         if not os.path.exists(base_folder + 'probs'):
             os.makedirs(base_folder + 'probs') 
     
-    csv_output = 'output_encodings.csv'
+    csv_output = 'output_encodings_lsamples500_2.csv'
 
     # Timing
     start_time = time.time()
@@ -309,29 +315,42 @@ def main(args):
                 mask_out = (chain_M*chain_M_pos*mask)[0,].cpu().numpy()
                 np.savez(unconditional_probs_only_file, log_p=concat_log_p, S=S[0,].cpu().numpy(), mask=mask[0,].cpu().numpy(), design_mask=mask_out)
             else:
-                randn_1 = torch.randn(chain_M.shape, device=X.device)
-                log_probs, h_V_from_encoder, h_V_original, encoded = model(X, S, mask, chain_M*chain_M_pos, residue_idx, chain_encoding_all, randn_1)
-                mask_for_empty = np.array(S[0] != 20)
+                error, res_labels = create_labels(args.pdb_path)
+                if error != True:
+                    randn_1 = torch.randn(chain_M.shape, device=X.device)
+                    h_V, h_E, h_V_original, encoded = model(X, S, mask, chain_M*chain_M_pos, residue_idx, chain_encoding_all, randn_1)
+                    mask_for_empty = np.asarray(S[0] != 20)
                 #print(mask_for_empty)
-                encoded_ = np.round(encoded.numpy()[0,:,:], decimals=5)[mask_for_empty]
-                print(encoded_.shape)
-                res_labels = create_labels(args.pdb_path)
-                print(len(res_labels))
-                for neuron in [5, 141, 216, 276, 559, 993]:
-                    max_idx = np.argmax(encoded_[:, neuron])
-                    print(res_labels[max_idx])
+                    
+                    #fraction_active = (encoded > 0).float().sum(dim=2) / encoded.shape[2]
+                    #print("Mean active neurons per sample:", fraction_active.mean().item())
+                    encoded_ = np.round(encoded.numpy()[0,:,:], decimals=5)[mask_for_empty]
+                    #neuron_usage = (encoded > 0).float().sum(dim=1)
+                    #usage_fraction = neuron_usage/encoded.shape[1]
+                    #counts, bins = np.histogram(usage_fraction)
+                    #print(counts)
+                    #plt.stairs(counts, bins)
+                    #plt.show()
+                    
+                #print(encoded_.shape)
+                #print(len(res_labels))
+                #for neuron in [5, 141, 216, 276, 559, 993]:
+                    #max_idx = np.argmax(encoded_[:, neuron])
+                    #print(res_labels[max_idx])
                 #print(S)
-                res_df = pd.DataFrame(res_labels, columns = ['identifier'])
+                    res_df = pd.DataFrame(res_labels, columns = ['identifier'])
                 #encoded_df = pd.DataFrame(encoded_, columns = list(range(1, 1025)))
                 #encoded_df = pd.concat([res_df, encoded_df], axis=1)
                 #encoded_df.to_csv(csv_output, )
-                encoded_df = pd.DataFrame(encoded_, columns = range(1, 1025))
-                encoded_df = pd.concat([res_df, encoded_df], axis=1)
-                write_header = os.path.getsize(csv_output) == 0 
-                encoded_df.to_csv(csv_output, mode='a', header = write_header, index=False)
+                    encoded_df = pd.DataFrame(encoded_, columns = range(1, 1025))
+                    encoded_df = pd.concat([res_df, encoded_df], axis=1)
+                    write_header = os.path.getsize(csv_output) == 0 
+                    encoded_df.to_csv(csv_output, mode='a', header = write_header, index=False)
                 #with open(csv_output, 'a') as f:
                 #    np.savetxt(f, encoded_, fmt='%.5f', delimiter=',')
-
+                else:
+                    print("Error was had")
+                    print(args.pdb_path)
                 '''
                 mask_for_loss = mask*chain_M*chain_M_pos
                 scores = _scores(S, log_probs, mask_for_loss) #score only the redesigned part
