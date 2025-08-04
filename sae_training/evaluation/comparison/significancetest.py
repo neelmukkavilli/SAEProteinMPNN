@@ -6,7 +6,7 @@ from sklearn.metrics import average_precision_score
 from sklearn.metrics import matthews_corrcoef
 import matplotlib.pyplot as plt
 
-model = 'lsamples500_2'
+model = 'okn_2'  # Change this to the desired model name
 
 # Load feature data and encodings
 dssp_path = '/WAVE/bio/ML/SAE_train/SAEProteinMPNN/sae_training/evaluation/dssp_summary.csv'
@@ -130,6 +130,16 @@ def eval_threshold(encodings_filtered, feature_act, feature, aa, score_csv=None,
                 else:
                     score_csv.loc[str(neuron), aa] = max#aps_score
 
+def eval_roc_auc(encodings_filtered, feature_act, feature, aa, score_csv=None, print_to_csv=True):
+    for neuron in range(1, 1025):
+        activations = encodings_filtered.iloc[:, neuron]
+        score = sklearn.metrics.roc_auc_score(feature_act, activations)
+        if print_to_csv:
+            if feature == 'sec_struct':
+                score_csv.loc[str(neuron), 'ss' + aa] = score
+            else:
+                score_csv.loc[str(neuron), aa] = score                    
+
 def score_cat(dssp_filtered, feature, encodings_filtered, sector, score_csv):
     # One hot encoding of features
     one_hot = pd.get_dummies(dssp_filtered[feature])
@@ -138,12 +148,12 @@ def score_cat(dssp_filtered, feature, encodings_filtered, sector, score_csv):
         for cat_key in cat_dict[sector].keys():
             print(cat_key)
             feature_act = one_hot.loc[:, cat_dict[sector][cat_key]].any(axis='columns')
-            eval_threshold(encodings_filtered, feature_act, feature, cat_key, score_csv)
+            eval_roc_auc(encodings_filtered, feature_act, feature, cat_key, score_csv)
     else:
         for aa in amino_acids:
             print(aa)
             feature_act = one_hot[aa]
-            eval_threshold(encodings_filtered, feature_act, feature, aa, score_csv)
+            eval_roc_auc(encodings_filtered, feature_act, feature, aa, score_csv)
 
 
 #aps_scores = {}
