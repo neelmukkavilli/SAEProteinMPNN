@@ -1,8 +1,8 @@
 import pandas as pd
 import numpy as np
 
-csv_input = 'output_encodings_test.csv'
-csv_output = 'normalized_encodings_test.csv'
+csv_input = 'encodings/output_encodings_verysparse25e2.csv'
+csv_output = 'encodings/normalized_encodings_verysparse25e2.csv'
 
 def normalize(arr):
     arr[arr < 0] = 0
@@ -19,6 +19,7 @@ df = pd.read_csv(csv_input).dropna()
 print(df.shape)
 res_labels = df.iloc[:, 0]
 print(res_labels.shape)
+print(res_labels)
 df = df.iloc[:, 1:]
 print(df.shape)
 
@@ -32,5 +33,6 @@ print(res_labels.shape)
 # Combine and save
 combined = pd.concat([res_labels, normalized_df], axis=1)
 print(f"Final shape: {combined.shape}")
+print(combined.columns)
 combined.to_csv(csv_output, index=False)
 print("csv written", flush=True)

@@ -12,8 +12,9 @@ for path_to_PDB in "$input_dir"/*.pdb; do
     echo "Processing $path_to_PDB..."
 
     python protein_mpnn_eval.py \
-            --path_to_model_weights "../training/exp_020/model_weights/lsample_e250_s500_2" \
+            --path_to_model_weights "../training/exp_020/model_weights/orthoruns/okn_2" \
             --model_name "epoch_last" \
+            --SAE_level "node" \
             --pdb_path $path_to_PDB \
             --pdb_path_chains "$chains_to_design" \
             --out_folder $output_dir \

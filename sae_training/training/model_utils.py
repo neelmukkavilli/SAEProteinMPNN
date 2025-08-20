@@ -156,7 +156,7 @@ def featurize(batch, device):
     chain_encoding_all = torch.from_numpy(chain_encoding_all).to(dtype=torch.long, device=device)
     return X, S, mask, lengths, chain_M, residue_idx, mask_self, chain_encoding_all
 
-
+## Loss functions
 def loss_nll(S, log_probs, mask):
     """ Negative log probabilities """
     criterion = torch.nn.NLLLoss(reduction='none')
@@ -167,7 +167,6 @@ def loss_nll(S, log_probs, mask):
     true_false = (S == S_argmaxed).float()
     loss_av = torch.sum(loss * mask) / torch.sum(mask)
     return loss, loss_av, true_false
-
 
 def loss_smoothed(S, log_probs, mask, weight=0.1):
     """ Negative log probabilities """
@@ -181,8 +180,36 @@ def loss_smoothed(S, log_probs, mask, weight=0.1):
     loss_av = torch.sum(loss * mask) / 2000.0 #fixed 
     return loss, loss_av
 
+def SAE_loss(original, encoded, decoded, sparse_weight):
+        # Only takes into account the last layer activations which is collected in these arrays
+        
+        mse_loss = torch.nn.functional.mse_loss(decoded, original)
+        sparse_loss = torch.mean(torch.abs(encoded))
+        #mse_loss = torch.nn.functional.mse_loss(model.output_act[2], model.input_act[2])
+        #sparse_loss = torch.mean(torch.abs(model.encoded_act[2]))
 
-# The following gather functions
+        total_loss = sparse_weight * sparse_loss + mse_loss
+        return total_loss, sparse_loss.detach(), mse_loss.detach()
+
+# KL sparse loss as alternative to L1 loss
+def KL_divergence(rho, encoded, device):
+        rho_hat = torch.mean(F.sigmoid(encoded), dim=2)
+        rho = torch.full(rho_hat.shape, rho).to(device)
+        kl = torch.sum(rho * torch.log(rho/rho_hat) + (1-rho) * torch.log((1-rho)/(1-rho_hat)))
+        return kl
+
+# Penalizes non-orthogonal vectors, not currently used
+def orthogonality_loss(act):
+        orth = 0
+        for i in range(act.shape[0]):
+            act_n = torch.nn.functional.normalize(act[i, : :], dim=0)
+            AT_A = torch.matmul(act_n, act_n.T)
+            identity = torch.eye(AT_A.shape[0], device=act.device)
+            orth += torch.norm(AT_A - identity, p='fro')**2
+
+        return orth / act.shape[0]
+
+## The following gather functions
 def gather_edges(edges, neighbor_idx):
     # Features [B,N,N,C] at Neighbor indices [B,N,K] => Neighbor features [B,N,K,C]
     neighbors = neighbor_idx.unsqueeze(-1).expand(-1, -1, -1, edges.size(-1))
@@ -210,9 +237,87 @@ def cat_neighbors_nodes(h_nodes, h_neighbors, E_idx):
     h_nn = torch.cat([h_neighbors, h_nodes], -1)
     return h_nn
 
+def remove_parallel_grads(weight):
+    with torch.no_grad():
+        for i in range(3):
+            W = weight[i].WS2.weight
+            W_normed = W / W.norm(dim=0, keepdim=True)
+            proj = (W.grad * W_normed).sum(dim=0, keepdim=True) * W_normed
+            W.grad -= proj
+        
+## See Anthropic Neuron Resampling procedure in "Towards Monosemanticity..."
+# also see https://github.com/shehper/sparse-dictionary-learning/blob/main/autoencoder/autoencoder.py for code
+def store_inputs_and_losses(count, reservoir_inputs, reservoir_losses, reservoir_size, original, encoded, decoded, mask, chain_M, sparse_weight):
+    mask_for_loss = (mask * chain_M).detach().bool()
+    # Package [B, L, D] -> [B*L, D] and [B, L, K, D] -> [B*L*K, D]
+    input = torch.reshape(original[mask_for_loss].detach(), (-1, 128)) # Size of dense encoded dimensions
+    encoded = torch.reshape(encoded[mask_for_loss].detach(), (-1, 1024)) # 8x hidden dim
+    output = torch.reshape(decoded[mask_for_loss].detach(), (-1, 128))
 
+    batch_loss = per_sample_SAE_loss(input, encoded, output, sparse_weight)
+
+    for i in range(batch_loss.shape[0]):
+        count += 1
+        if len(reservoir_inputs) < reservoir_size:
+            reservoir_inputs.append(input[i, :].cpu())
+            reservoir_losses.append(batch_loss[i].cpu())
+        else:
+            j = random.randint(0, count-1)
+            if j < reservoir_size:
+                reservoir_inputs[j] = input[i, :].cpu()
+                reservoir_losses[j] = batch_loss[i].cpu()
+    return reservoir_inputs, reservoir_losses
+
+def per_sample_SAE_loss(input, encoded, output, sparse_weight):
+    mse_loss = torch.sum(torch.nn.functional.mse_loss(output, input, reduction='none'), dim=1).detach()
+    sparse_loss = torch.mean(torch.abs(encoded), dim=1).detach()
+    return mse_loss + sparse_weight * sparse_loss
+
+def reinitialize_weights(model, optimizer, reservoir_inputs, reservoir_losses, alive_neurons, dead_neurons, device):
+    inputs = torch.stack(reservoir_inputs)
+    losses = torch.stack(reservoir_losses)
+
+    resampling_indices = sample_inputs_from_losses(inputs, losses, dead_neurons, device)
+    adjust_weights(model, alive_neurons, dead_neurons, resampling_indices)
+    reset_optimizer(optimizer, dead_neurons)
+
+def sample_inputs_from_losses(inputs, losses, dead_neurons, device):
+    probs = losses ** 2
+    probs /= probs.sum()
+    idx = torch.multinomial(probs, num_samples=len(dead_neurons), replacement=True)
+    resampling_indices = inputs[idx].to(device)
+    return resampling_indices
+
+def adjust_weights(model, alive_neurons, dead_neurons, resampling_indices):
+    # Adjusts the 3rd SAE section since encoding step is repeated 3 times
+    
+    # Find average "length" of encoding vector
+    avg_enc_norm = torch.linalg.vector_norm(model.encoder_layers[2].WS1.weight[alive_neurons], dim=1).mean()
+    print(avg_enc_norm.item())
+    # Normalize inputs to unit L2 (make vector length=1)
+    examples_unit_norm = F.normalize(resampling_indices, dim=1)
+    print(examples_unit_norm.item())
+    # Set decoder weights to dictionary vector (inputs)
+    model.encoder_layers[2].WS2.weight[:, dead_neurons] = examples_unit_norm.T
+    # Multiply inputs by average encoded length and 0.2 to make them weakly activate
+    adjusted_examples = examples_unit_norm * avg_enc_norm * 0.2
+    # Set encoder weights and set encoder biases to 0
+    model.encoder_layers[2].WS1.weight[dead_neurons] = adjusted_examples
+    model.encoder_layers[2].WS1.bias[dead_neurons] = 0
+
+def reset_optimizer(optimizer, dead_neurons):
+    for i, param in enumerate(optimizer.param_groups[0]['params']):
+        param_state = optimizer.state[param]
+        if i in [0, 1]:
+            param_state['exp_avg'][dead_neurons] = 0
+            param_state['exp_avg_sq'][dead_neurons] = 0
+        elif i == 2:
+            param_state['exp_avg'][:, dead_neurons] = 0
+            param_state['exp_avg_sq'][:, dead_neurons] = 0
+
+## Define ProteinMPNN
 class EncLayer(nn.Module):
-    def __init__(self, num_hidden, num_in, dropout=0.1, num_heads=None, scale=30):
+    def __init__(self, num_hidden, num_in, dropout=0.1, num_heads=None, scale=30, SAE_level='node', reinsert_SAE=False):
         super(EncLayer, self).__init__()
         self.num_hidden = num_hidden
         self.num_in = num_in
@@ -230,14 +335,14 @@ class EncLayer(nn.Module):
         self.W3 = nn.Linear(num_hidden, num_hidden, bias=True)
         
         # SAE Layers
-        self.SAE_act = nn.LeakyReLU()
-        self.WS1 = nn.Linear(num_hidden, num_hidden*8, bias=True)
+        self.SAE_act = nn.ReLU()
+        self.WS1 = nn.Linear(num_hidden, num_hidden*8, bias=True) # Dense encodings expanded by 8 times i.e. [B, L, 128] -> [B, L, 1024]
         self.WS2 = nn.Linear(num_hidden*8, num_hidden, bias=True)
 
-        nn.init.kaiming_uniform_(self.WS1.weight, nonlinearity='leaky_relu')
-        nn.init.constant_(self.WS1.bias, 0)
-        nn.init.kaiming_uniform_(self.WS2.weight, nonlinearity='leaky_relu')
-        nn.init.constant_(self.WS2.bias, 0)
+        nn.init.kaiming_uniform_(self.WS1.weight)
+        nn.init.kaiming_uniform_(self.WS2.weight)
+
+        self.normalize_decoder()
 
         # Edge Layers
         self.W11 = nn.Linear(num_hidden + num_in, num_hidden, bias=True)
@@ -246,37 +351,57 @@ class EncLayer(nn.Module):
         self.act = torch.nn.GELU()
         self.dense = PositionWiseFeedForward(num_hidden, num_hidden * 4)
 
-    def forward(self, h_V, h_E, E_idx, mask_V=None, mask_attend=None):
+    def normalize_decoder(self):
+        with torch.no_grad():
+            W = self.WS2.weight
+            W /= W.norm(dim=0, keepdim=True)
+
+    def forward(self, h_V, h_E, E_idx, SAE_level='node', reinsert_SAE = False, mask_V=None, mask_attend=None):
         """ Parallel computation of full transformer layer """
+        if True:
+            h_EV = cat_neighbors_nodes(h_V, h_E, E_idx)
+            h_V_expand = h_V.unsqueeze(-2).expand(-1,-1,h_EV.size(-2),-1)
+            h_EV = torch.cat([h_V_expand, h_EV], -1)
+            h_message = self.W3(self.act(self.W2(self.act(self.W1(h_EV))))).detach()
+            
+            if mask_attend is not None:
+                h_message = mask_attend.unsqueeze(-1) * h_message
+            dh = torch.sum(h_message, -2) / self.scale
+            h_V = self.norm1(h_V + self.dropout1(dh))
 
-        h_EV = cat_neighbors_nodes(h_V, h_E, E_idx)
-        h_V_expand = h_V.unsqueeze(-2).expand(-1,-1,h_EV.size(-2),-1)
-        h_EV = torch.cat([h_V_expand, h_EV], -1)
-        h_message = self.W3(self.act(self.W2(self.act(self.W1(h_EV)))))
+            dh = self.dense(h_V)
+            h_V = self.norm2(h_V + self.dropout2(dh)).detach() # 
+            if mask_V is not None:
+                mask_V = mask_V.unsqueeze(-1)
+                h_V = mask_V * h_V
+
+        ## Node SAE
+        # SAE is always applied after norm and dropout layers which will change if we want to probe previous MLP layers
+        if SAE_level == 'node':
+            encoded = self.SAE_act(self.WS1(h_V - self.WS2.bias))
+            if reinsert_SAE == True: # Use to test accuracy of encoding space, otherwise not necessary
+                h_V, original = self.WS2(encoded), h_V
+                decoded = h_V
+            else:
+                decoded = self.WS2(encoded)
+
+        if True:
+            h_EV = cat_neighbors_nodes(h_V, h_E, E_idx)
+            h_V_expand = h_V.unsqueeze(-2).expand(-1,-1,h_EV.size(-2),-1)
+            h_EV = torch.cat([h_V_expand, h_EV], -1)
+            h_message = self.W13(self.act(self.W12(self.act(self.W11(h_EV)))))
+            h_E = self.norm3(h_E + self.dropout3(h_message)).detach()
         
-        if mask_attend is not None:
-            h_message = mask_attend.unsqueeze(-1) * h_message
-        dh = torch.sum(h_message, -2) / self.scale
-        h_V = self.norm1(h_V + self.dropout1(dh))
+        ## Edge SAE
+        if SAE_level == 'edge':
+            encoded = self.SAE_act(self.WS1(h_E - self.WS2.bias))
+            if reinsert_SAE == True:
+                h_E, original = self.WS2(encoded), h_E
+                decoded = h_E
+            else:
+                decoded = self.WS2(encoded)
 
-        dh = self.dense(h_V)
-        h_V = self.norm2(h_V + self.dropout2(dh))
-        if mask_V is not None:
-            mask_V = mask_V.unsqueeze(-1)
-            h_V = mask_V * h_V
-
-        # SAE Part
-        encoded = self.SAE_act(self.WS1(h_V - self.WS2.bias))
-        h_V, h_V_original = self.WS2(encoded), h_V
-
-        h_EV = cat_neighbors_nodes(h_V, h_E, E_idx)
-        h_V_expand = h_V.unsqueeze(-2).expand(-1,-1,h_EV.size(-2),-1)
-        h_EV = torch.cat([h_V_expand, h_EV], -1)
-        h_message = self.W13(self.act(self.W12(self.act(self.W11(h_EV)))))
-        h_E = self.norm3(h_E + self.dropout3(h_message))
-        
-        return h_V, h_E, h_V_original, encoded
-
+        return h_V, h_E, original, encoded, decoded
 
 class DecLayer(nn.Module):
     def __init__(self, num_hidden, num_in, dropout=0.1, num_heads=None, scale=30):
@@ -318,7 +443,6 @@ class DecLayer(nn.Module):
             h_V = mask_V * h_V
         return h_V
 
-
 class PositionWiseFeedForward(nn.Module):
     def __init__(self, num_hidden, num_ff):
         super(PositionWiseFeedForward, self).__init__()
@@ -342,7 +466,6 @@ class PositionalEncodings(nn.Module):
         d_onehot = torch.nn.functional.one_hot(d, 2*self.max_relative_feature+1+1)
         E = self.linear(d_onehot.float())
         return E
-
 
 class ProteinFeatures(nn.Module):
     def __init__(self, edge_features, node_features, num_positional_embeddings=16,
@@ -443,8 +566,6 @@ class ProteinFeatures(nn.Module):
         E = self.norm_edges(E)
         return E, E_idx
 
-
-
 class ProteinMPNN(nn.Module):
     def __init__(self, num_letters=21, node_features=128, edge_features=128,
         hidden_dim=128, num_encoder_layers=3, num_decoder_layers=3,
@@ -474,18 +595,19 @@ class ProteinMPNN(nn.Module):
         ])
         self.W_out = nn.Linear(hidden_dim, num_letters, bias=True)
 
-        for p in self.parameters():
-            if p.dim() > 1:
-                nn.init.kaiming_normal_(p)
+        #for p in self.parameters():
+        #    if p.dim() > 1:
+        #        nn.init.kaiming_uniform_(p) # Changed from kaiming_normal in line with SAE literature
+        #
+        
 
-    def forward(self, X, S, mask, chain_M, residue_idx, chain_encoding_all):
+    def forward(self, X, S, mask, chain_M, residue_idx, chain_encoding_all, SAE_level, reinsert_SAE):
         """ Graph-conditioned sequence model """
         device=X.device
         # Prepare node and edge embeddings
         E, E_idx = self.features(X, mask, residue_idx, chain_encoding_all)
         h_V = torch.zeros((E.shape[0], E.shape[1], E.shape[-1]), device=E.device)
         h_E = self.W_e(E)
-        #print("initialized h_V and h_E")
         # Encoder is unmasked self-attention
         mask_attend = gather_nodes(mask.unsqueeze(-1),  E_idx).squeeze(-1)
         mask_attend = mask.unsqueeze(-1) * mask_attend
@@ -494,41 +616,49 @@ class ProteinMPNN(nn.Module):
         self.encoded_act = []
         self.output_act = []
         for layer in self.encoder_layers:
-            h_V, h_E, h_V_original, encoded = torch.utils.checkpoint.checkpoint(layer, h_V, h_E, E_idx, mask, mask_attend, use_reentrant=True)
-            self.input_act.append(h_V_original)
-            self.encoded_act.append(encoded)
-            self.output_act.append(h_V)
+            h_V, h_E, original, encoded, decoded = torch.utils.checkpoint.checkpoint(layer, h_V, h_E, E_idx, SAE_level, reinsert_SAE, mask, mask_attend, use_reentrant=True)
+            if SAE_level == 'edge':
+                self.input_act.append(torch.reshape(original, (1, -1, original.shape[3])))
+                self.encoded_act.append(torch.reshape(encoded, (1, -1, encoded.shape[3])))
+                self.output_act.append(torch.reshape(decoded, (1, -1, decoded.shape[3])))
+            elif SAE_level == 'node':
+                self.input_act.append(original)
+                self.encoded_act.append(encoded)
+                self.output_act.append(decoded)
+            else:
+                self.input_act.append(original)
+                self.encoded_act.append(encoded)
+                self.output_act.append(decoded)
+        with torch.no_grad(): # Don't collect gradients for decoder
+            # Concatenate sequence embeddings for autoregressive decoder
+            h_S = self.W_s(S)
+            h_ES = cat_neighbors_nodes(h_S, h_E, E_idx)
 
-        # Concatenate sequence embeddings for autoregressive decoder
-        h_S = self.W_s(S)
-        h_ES = cat_neighbors_nodes(h_S, h_E, E_idx)
-
-        # Build encoder embeddings
-        h_EX_encoder = cat_neighbors_nodes(torch.zeros_like(h_S), h_E, E_idx)
-        h_EXV_encoder = cat_neighbors_nodes(h_V, h_EX_encoder, E_idx)
+            # Build encoder embeddings
+            h_EX_encoder = cat_neighbors_nodes(torch.zeros_like(h_S), h_E, E_idx)
+            h_EXV_encoder = cat_neighbors_nodes(h_V, h_EX_encoder, E_idx)
 
 
-        chain_M = chain_M*mask #update chain_M to include missing regions
-        decoding_order = torch.argsort((chain_M+0.0001)*(torch.abs(torch.randn(chain_M.shape, device=device)))) #[numbers will be smaller for places where chain_M = 0.0 and higher for places where chain_M = 1.0]
-        mask_size = E_idx.shape[1]
-        permutation_matrix_reverse = torch.nn.functional.one_hot(decoding_order, num_classes=mask_size).float()
-        order_mask_backward = torch.einsum('ij, biq, bjp->bqp',(1-torch.triu(torch.ones(mask_size,mask_size, device=device))), permutation_matrix_reverse, permutation_matrix_reverse)
-        mask_attend = torch.gather(order_mask_backward, 2, E_idx).unsqueeze(-1)
-        mask_1D = mask.view([mask.size(0), mask.size(1), 1, 1])
-        mask_bw = mask_1D * mask_attend
-        mask_fw = mask_1D * (1. - mask_attend)
+            chain_M = chain_M*mask #update chain_M to include missing regions
+            decoding_order = torch.argsort((chain_M+0.0001)*(torch.abs(torch.randn(chain_M.shape, device=device)))) #[numbers will be smaller for places where chain_M = 0.0 and higher for places where chain_M = 1.0]
+            mask_size = E_idx.shape[1]
+            permutation_matrix_reverse = torch.nn.functional.one_hot(decoding_order, num_classes=mask_size).float()
+            order_mask_backward = torch.einsum('ij, biq, bjp->bqp',(1-torch.triu(torch.ones(mask_size,mask_size, device=device))), permutation_matrix_reverse, permutation_matrix_reverse)
+            mask_attend = torch.gather(order_mask_backward, 2, E_idx).unsqueeze(-1)
+            mask_1D = mask.view([mask.size(0), mask.size(1), 1, 1])
+            mask_bw = mask_1D * mask_attend
+            mask_fw = mask_1D * (1. - mask_attend)
 
-        h_EXV_encoder_fw = mask_fw * h_EXV_encoder
-        h_V_from_encoder = h_V
-        for layer in self.decoder_layers:
-            h_ESV = cat_neighbors_nodes(h_V, h_ES, E_idx)
-            h_ESV = mask_bw * h_ESV + h_EXV_encoder_fw
-            h_V = torch.utils.checkpoint.checkpoint(layer, h_V, h_ESV, mask, use_reentrant=True)
-        logits = self.W_out(h_V)
-        log_probs = F.log_softmax(logits, dim=-1)
-        return log_probs, h_V_from_encoder, h_V_original, encoded
+            h_EXV_encoder_fw = mask_fw * h_EXV_encoder
+
+            for layer in self.decoder_layers:
+                h_ESV = cat_neighbors_nodes(h_V, h_ES, E_idx)
+                h_ESV = mask_bw * h_ESV + h_EXV_encoder_fw
+                h_V = torch.utils.checkpoint.checkpoint(layer, h_V, h_ESV, mask, use_reentrant=True)
+            logits = self.W_out(h_V)
+            log_probs = F.log_softmax(logits, dim=-1)
+        return log_probs, original, encoded, decoded
         
-
 class NoamOpt:
     "Optim wrapper that implements rate."
     def __init__(self, model_size, factor, warmup, optimizer, step):

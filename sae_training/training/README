@@ -1,0 +1,82 @@
+## Computers
+
+Personal computer: From your personal computer you will need to use ssh to use one of the following
+
+rainier/shasta: Local computers with access to folders on WAVE. Edit your files from here
+
+login node: Entry point into WAVE, do not run any programs here and only use to navigate elsewhere
+
+jupyter node: Access from https://jupyterhub.wave.scu.edu, if on your own account you will need to change the path_for_outputs parameter and create a directory to store log.txt. and model weight files
+The best jupyter notebook uses a V100 NVDIA GPU. Each GPU has different requirements for use so you will need to use the v100mlfold conda environment
+You can run commands using the jupyter terminal
+
+bio node: use srun_bio to get an interactive terminal and use similarly to the jupyter terminal.
+Uses an A16 NVIDIA GPU so use the a16mlfold conda environment
+
+## File locations
+
+Almost all important files are stored in /WAVE/bio/ML/SAE_train/SAEProteinMPNN/sae_training/ which can be accessed through either rainier/shasta computers or on WAVE
+
+Using WAVE you will have your own folder which you will use to store log.txt and model_weights 
+## CAUTION ## It is very easy to overwrite files during training so as soon as training finishes, store the model weights (epoch_epoch#.pt or epoch_last.pt) in their own folder with the corresponding log.txt file and its own README explaining what you changed and why. It is very important to do this for every run so we can recreate runs and don't lose track of files.
+
+Once you log in to WAVE you will start in your own personal folder and will have to navigate to WAVE/bio... to run scripts. 
+
+## SAE model:
+
+Dense embeddings from the original model (input) are turned into sparse embeddings (encoded) and then reconverted into dense embeddings (output)
+
+## Hyperparameters:
+
+SAE_level: either "node" or "edge". if None, model will run without the sparse autoencoder and the output and encoded stored will be the same as the input
+
+reinsert_SAE: If the model uses the output for the rest of the model, should be FALSE if training, only use for specific testing purpose
+
+learning_rate: lower learning rates are more stable and more likely to find the most optimal local minimum but may miss the lowest possible loss
+
+sparse_weight: How much the model should emphasize sparsity over recreating the dense embeddings. Calculated as the mean absolute value of the encoded space
+
+mse_weight: mean squared reconstruction error; compares how similar the input and output are. Keep at 1.0 and only change the sparse_weight for consistency
+
+reinit_every_n_steps: Every n steps the model will find how many neurons have not been active for n/2 steps and reinitialize them. 
+Uses Anthropic Neuron Resampling procedure described in "Towards Monosemanticity..."
+
+reservoir_size: Resampling dead neurons collects inputs and losses for many proteins, larger reservoir size collects more proteins but takes up more time and memory
+
+path_for_outputs: The folder to store log.txt and model weights since it will not have write access to WAVE/bio. log.txt and model_weights will have to be moved here after training but can be stored and sorted there temporarily
+
+path_for_training_data: use pdb_2021aug02 for actual training runs and pdb_2021aug02_sample for debugging
+
+previous_checkpoint: For new runs, should be "". Otherwise should be "./exp_020/model_weights/epoch_last.pt" if training ended prematurely or elsewhere if you want to retrain a model
+
+num_examples_per_epoch: The number of proteins loaded in per epoch which are then sliced into batches. More proteins gives a more representative sample but takes more time and memory
+
+num_epochs: In each epoch the the number of protein examples are sliced into batches and training/evaluation loss is calculated. Run for ~200 for a good loss. Try experimenting with longer runs for more learned features/fewer dead neurons
+
+batch_size: Number of tokens (residues) in each batch. A batch is of shape [B, L, 4, 3] where B is the number of batches and L is the length of the sequence. 4 is the number of backbone atoms and 3 is for the coordinates in 3D space
+
+## Training outputs
+
+During training the terminal will print the following each epoch and also store them in log.txt
+
+epoch: Epoch #, should start at 0 for new runs
+
+time: time in seconds for that epoch, epochs where proteins are reshuffled (reload_data_every_n_epochs) are usually longer
+
+sparse loss: How close the average activations are to zero
+
+MSE loss: How similar the input and output are, exactly similar => MSE loss = 0
+
+norm loss: The actual loss the original model cares about, should not change through training unless reinsert_SAE = True (will change negligibly between epochs because batches are reshuffled)
+
+specificity: The average number of samples the average neuron activates for, lower is better
+
+train_acc: Accuracy of the model based on training data, should not change through training unless reinsert_SAE = True
+
+valid_acc: Accuracy of the model based on evaluation data, should not change through training unless reinsert_SAE = True
+
+## Notes:
+
+Once you are set up, you can play around with changing hyperparameters as you wish just be sure to document your changes. Feel free to poke around the training.py and model_utils.py scripts to understand what's going on
+
+## If you have any trouble with SSH, refer to the google drive doc.

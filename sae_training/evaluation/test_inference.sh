@@ -16,8 +16,9 @@ chains_to_design=""
 
 
 python protein_mpnn_eval.py \
-        --path_to_model_weights "../training/exp_020/model_weights/regsparse" \
-        --model_name "epoch_last" \
+        --path_to_model_weights "../training/exp_020" \
+        --model_name "v_48_020" \
+        --SAE_level "edge" \
         --pdb_path $path_to_PDB \
         --pdb_path_chains "$chains_to_design" \
         --out_folder $output_dir \

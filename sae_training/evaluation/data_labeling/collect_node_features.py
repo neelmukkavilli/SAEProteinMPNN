@@ -1,13 +1,13 @@
 import MDAnalysis
 import numpy as np
 from MDAnalysis.analysis.hydrogenbonds.hbond_analysis import HydrogenBondAnalysis as HBA
-from pdbfixer import PDBFixer
-from openmm.app import PDBFile
+#from pdbfixer import PDBFixer
+#from openmm.app import PDBFile
 from MDAnalysis.analysis import contacts
 from pathlib import Path
 from natsort import natsorted
 from Bio.PDB import PDBParser, DSSP, PPBuilder
-import Bio.PDB.Polypeptide as polypep
+#import Bio.PDB.Polypeptide as polypep
 import pandas as pd
 
 main_dict = {}
@@ -121,27 +121,27 @@ def count_HB(pdb_path): # Returns dict {residue: number of h bonds either accept
         else:
             HBcount_results[int(res)] += 1
 '''
-
 def find_node_features(pdb_path):
     pdb_name = pdb_path[-8:-4]
     u = MDAnalysis.Universe(str(pdb_path))
 
-    calphas = u.select_atoms('protein and name CA')
+    calphas = u.select_atoms('protein and resname GLY ALA PRO VAL LEU ILE MET SER THR CYS ASN GLN PHE TYR TRP LYS ARG HIS ASP GLU and name CA')
     collect_B_factor(calphas, pdb_name)
     
     find_angles(calphas, pdb_name)
+    u = calphas.residues.atoms
+    sel1 = u.select_atoms("protein and resname GLY ALA PRO VAL LEU ILE MET SER THR CYS ASN GLN PHE TYR TRP LYS ARG HIS ASP GLU and not name H* C*")
 
-    sel1 = u.select_atoms("protein and not name H* C*")
     count_pairs(sel1, sel1, 0, 3.5, pdb_name, pair='philic')
 
-    sel1 = u.select_atoms("protein and name H* C*")
+    sel1 = u.select_atoms("protein and resname GLY ALA PRO VAL LEU ILE MET SER THR CYS ASN GLN PHE TYR TRP LYS ARG HIS ASP GLU and name H* C*")
     count_pairs(sel1, sel1, 2.5, 4.6, pdb_name, pair='phobic')
 
     sel1 = u.select_atoms("protein and resname ARG LYS HIS and name NZ ND1 NE2 NH1 NH2")
-    sel2 = u.select_atoms("protein and (resname ASP GLU and name OD1 OD2 OE1 OE2) or name OXT")
+    sel2 = u.select_atoms("(protein and (resname ASP GLU and name OD1 OD2 OE1 OE2)) or (protein and name OXT)")
     count_pairs(sel1, sel2, 0, 4.0, pdb_name, pair='SB')
 
-    sel1 = u.select_atoms("protein and name CA C O N CB")
+    sel1 = u.select_atoms("protein and resname GLY ALA PRO VAL LEU ILE MET SER THR CYS ASN GLN PHE TYR TRP LYS ARG HIS ASP GLU and name CA C O N CB")
     #sel2 = u.select_atoms("protein and name Ca C O N CB")
     dmin = 2 - 4/6
     dmax = 22 + 4/6
@@ -155,35 +155,48 @@ def find_node_features(pdb_path):
                 main_dict[identifier][j] = 0
 
 def run_dssp(pdb_path):
-    parser = PDBParser(QUIET=False)
+    parser = PDBParser(QUIET=True)
     structure = parser.get_structure("prot", str(pdb_path))
     model = structure[0]
     dssp = DSSP(model, str(pdb_path), dssp='dssp')
 
     for key in dssp.keys():
-        chain = key[0]
-        idx = key[1][1]
-        aa, ss, asa, phi, psi = (
-            dssp[key][1], dssp[key][2], dssp[key][3],
-            dssp[key][4], dssp[key][5]
-        )
-        identifier = f"{str(pdb_path)[-8:-4]}{chain}{idx}"
-        main_dict[identifier]['residue'] = aa
-        main_dict[identifier]['sec_struct'] = ss
-        main_dict[identifier]['ASA'] = asa
-        main_dict[identifier]['phi'] = phi
-        main_dict[identifier]['psi'] = psi
+        try:
+            chain = key[0]
+            idx = key[1][1]
+            aa, ss, asa, phi, psi = (
+                dssp[key][1], dssp[key][2], dssp[key][3],
+                dssp[key][4], dssp[key][5]
+            )
+            identifier = f"{str(pdb_path)[-8:-4]}{chain}{idx}"
+            main_dict[identifier]['residue'] = aa
+            main_dict[identifier]['sec_struct'] = ss
+            main_dict[identifier]['ASA'] = asa
+            main_dict[identifier]['phi'] = phi
+            main_dict[identifier]['psi'] = psi
+        except KeyError:
+            continue
 
 input_pdb_dir = Path('/WAVE/bio/ML/SAE_train/SAEProteinMPNN/sae_training/evaluation/inputs')
 pdb_files = list(input_pdb_dir.glob('*.pdb'))
-pdb_files = [Path(p) for p in natsorted([str(p) for p in pdb_files])]
-pdb_files = pdb_files[:1]  # Limit to first few PDB files for testing
+pdb_files = np.array([Path(p) for p in natsorted([str(p) for p in pdb_files])])
+np.random.seed(0)
+#mask = np.random.rand(len(pdb_files)) > 0
+pdb_files = pdb_files#[mask]
+print(len(pdb_files))
+#print(set(pdb_files))
+print(len(set(pdb_files)))
+#addition += 1
+pdb_files = pdb_files  # Limit to first few PDB files for testing
 main_df = pd.DataFrame()
 for pdb_file in pdb_files:
     find_node_features(str(pdb_file))
+    print("Working on: " + str(pdb_file)[-8:])
     run_dssp(pdb_file)
+    #column_names = ['bfactor', 'xy', 'xz', 'yz', 'philic', 'phobic', 'SB'] + list(range(16))
     column_names = ['residue', 'sec_struct', 'ASA', 'phi', 'psi', 'bfactor', 'xy', 'xz', 'yz', 'philic', 'phobic', 'SB'] + list(range(16))
     df = pd.DataFrame(main_dict).T[column_names]
+    main_dict = {}
     main_df = pd.concat([main_df, df], axis=0)
 
 # Normalization steps
@@ -237,5 +250,5 @@ norm_arr = norm_angles(arr)
 main_df['yz'] = norm_arr.values
 print("yz normalized")
 
-main_df.to_csv('comparison/node_features.csv', index=True)
+main_df.to_csv('node_features.csv', index=True)
 print("Node features saved")
