@@ -182,13 +182,13 @@ def loss_smoothed(S, log_probs, mask, weight=0.1):
 
 def SAE_loss(original, encoded, decoded, sparse_weight):
         # Only takes into account the last layer activations which is collected in these arrays
-        
+
         mse_loss = torch.nn.functional.mse_loss(decoded, original)
         sparse_loss = torch.mean(torch.abs(encoded))
         #mse_loss = torch.nn.functional.mse_loss(model.output_act[2], model.input_act[2])
         #sparse_loss = torch.mean(torch.abs(model.encoded_act[2]))
 
-        total_loss = sparse_weight * sparse_loss + mse_loss
+        total_loss = (sparse_weight * sparse_loss) + mse_loss
         return total_loss, sparse_loss.detach(), mse_loss.detach()
 
 # KL sparse loss as alternative to L1 loss
@@ -290,19 +290,17 @@ def sample_inputs_from_losses(inputs, losses, dead_neurons, device):
 
 def adjust_weights(model, alive_neurons, dead_neurons, resampling_indices):
     # Adjusts the 3rd SAE section since encoding step is repeated 3 times
-    
+
     # Find average "length" of encoding vector
     avg_enc_norm = torch.linalg.vector_norm(model.encoder_layers[2].WS1.weight[alive_neurons], dim=1).mean()
-    print(avg_enc_norm.item())
     # Normalize inputs to unit L2 (make vector length=1)
-    examples_unit_norm = F.normalize(resampling_indices, dim=1)
-    print(examples_unit_norm.item())
+    examples_unit_norm = F.normalize(resampling_indices, dim=1) * avg_enc_norm * 1e-3
     # Set decoder weights to dictionary vector (inputs)
     model.encoder_layers[2].WS2.weight[:, dead_neurons] = examples_unit_norm.T
     # Multiply inputs by average encoded length and 0.2 to make them weakly activate
-    adjusted_examples = examples_unit_norm * avg_enc_norm * 0.2
+    adjusted_examples = examples_unit_norm * avg_enc_norm * 1e-3
     # Set encoder weights and set encoder biases to 0
-    model.encoder_layers[2].WS1.weight[dead_neurons] = adjusted_examples
+    model.encoder_layers[2].WS1.weight[dead_neurons, :] = adjusted_examples
     model.encoder_layers[2].WS1.bias[dead_neurons] = 0
 
 def reset_optimizer(optimizer, dead_neurons):
@@ -314,6 +312,21 @@ def reset_optimizer(optimizer, dead_neurons):
         elif i == 2:
             param_state['exp_avg'][:, dead_neurons] = 0
             param_state['exp_avg_sq'][:, dead_neurons] = 0
+
+def oldreinit_method(model, dead_neurons, floor, fraction_reinit):
+    if len(dead_neurons) > floor:
+        num_to_reinit = max(1, int(fraction_reinit * len(dead_neurons)))
+        indices = dead_neurons[torch.randperm(len(dead_neurons))[:num_to_reinit]]
+        encoder_weight = model.encoder_layers[2].WS1.weight
+        #decoder_weight = model.encoder_layers[2].WS2.weight
+        #encoder_bias = model.encoder_layers[2].WS1.bias
+        #encoder_reinit_weight = torch.empty_like(encoder_weight)
+        #nn.init.kaiming_uniform_(encoder_reinit_weight)
+        #encoder_weight = encoder_reinit_weight[indices, :]
+        #encoder_bias[indices] = 0
+        #decoder_reinit_weight = torch.empty_like(decoder_weight)
+        #nn.init.kaiming_uniform_(decoder_reinit_weight)
+        #decoder_weight = decoder_reinit_weight[:, indices]
 
 ## Define ProteinMPNN
 class EncLayer(nn.Module):

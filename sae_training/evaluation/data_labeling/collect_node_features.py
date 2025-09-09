@@ -227,12 +227,12 @@ print("ASA normalized")
 
 arr = main_df['phi']
 norm_arr = norm_angles(arr)
-main_df['psi'] = norm_arr.values
+main_df['phi'] = norm_arr.values
 print("phi normalized")
 
 arr = main_df['psi']
 norm_arr = norm_angles(arr)
-main_df['phi'] = norm_arr.values
+main_df['psi'] = norm_arr.values
 print("psi normalized")
 
 arr = main_df['xy']

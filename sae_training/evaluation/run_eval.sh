@@ -1,6 +1,11 @@
 input_dir="inputs"
 
 output_dir="../outputs/training_test_output"
+
+output_csv="dense"
+
+touch "encodings/output_encodings_$output_csv.csv"
+
 if [ ! -d $output_dir ]
 then
     mkdir -p $output_dir
@@ -12,14 +17,15 @@ for path_to_PDB in "$input_dir"/*.pdb; do
     echo "Processing $path_to_PDB..."
 
     python protein_mpnn_eval.py \
-            --path_to_model_weights "../training/exp_020/model_weights/orthoruns/okn_2" \
+            --path_to_model_weights "../training/exp_020/model_weights/lsample_e250_s500_2" \
             --model_name "epoch_last" \
-            --SAE_level "node" \
+            --SAE_level "none" \
             --pdb_path $path_to_PDB \
             --pdb_path_chains "$chains_to_design" \
             --out_folder $output_dir \
-            --num_seq_per_target 1 \
-            --sampling_temp "0.1" \
-            --seed 37 \
-            --batch_size 1
-done
+            --csv_output $output_csv
+done 
+
+export CSV=$output_csv
+
+python normalize_encodings.py  

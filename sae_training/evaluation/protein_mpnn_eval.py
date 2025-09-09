@@ -224,7 +224,7 @@ def main(args):
         if not os.path.exists(base_folder + 'probs'):
             os.makedirs(base_folder + 'probs') 
     
-    csv_output = 'output_encodings_test.csv'
+    csv_output = 'encodings/output_encodings_' + args.csv_output + '.csv'
 
     # Timing
     start_time = time.time()
@@ -324,7 +324,7 @@ def main(args):
                     res_df = pd.DataFrame(res_labels, columns = ['identifier'])
                     encoded_df = pd.DataFrame(encoded_, columns = range(1, 1025))
                     encoded_df = pd.concat([res_df, encoded_df], axis=1)
-                    write_header = os.path.getsize(csv_output) == 0 
+                    write_header = os.path.getsize(csv_output) == 0
                     encoded_df.to_csv(csv_output, mode='a', header = write_header, index=False)
                 else:
                     print("Error was had")
@@ -354,7 +354,7 @@ def main(args):
                     mask_for_empty = np.asarray(S[0] != 20)
                     encoded_ = np.round(encoded.numpy()[0,:,:], decimals=5)[mask_for_empty]
                     res_df = pd.DataFrame(res_labels, columns = ['identifier'])
-                    encoded_df = pd.DataFrame(encoded_, columns = range(1, 1025))
+                    encoded_df = pd.DataFrame(encoded_, columns = range(1, 129))
                     encoded_df = pd.concat([res_df, encoded_df], axis=1)
                     write_header = os.path.getsize(csv_output) == 0 
                     encoded_df.to_csv(csv_output, mode='a', header = write_header, index=False)
@@ -472,6 +472,7 @@ def main(args):
 if __name__ == "__main__":
     argparser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     argparser.add_argument("--SAE_level", type=str, default="node", help="SAE at either node or edge")
+    argparser.add_argument("--csv_output", type=str, default="encodings/test.csv")
     argparser.add_argument("--suppress_print", type=int, default=1, help="0 for False, 1 for True")
     argparser.add_argument("--ca_only", action="store_true", default=False, help="Parse CA-only structures and use CA-only models (default: false)")   
     argparser.add_argument("--path_to_model_weights", type=str, default="", help="Path to model weights folder;") 

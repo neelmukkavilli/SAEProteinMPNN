@@ -744,11 +744,12 @@ class EncLayer(nn.Module):
             encoded = self.SAE_act(self.WS1(h_E - self.WS2.bias))
             h_E, original = self.WS2(encoded), h_E
 
-        else:
-            encoded, original = h_V
-        '''
+        if SAE_level != 'node' and SAE_level != 'edge':
+            #print(SAE_level)
+            encoded, original = h_V, h_V
+        
         if encoded.shape[2] == 1024:
-            
+            '''
             W = np.array(h_V.numpy()[0, :, :])
             pca = PCA(n_components=100)  # Keep 95% variance
             W_np = normalize(W)
@@ -798,8 +799,8 @@ class EncLayer(nn.Module):
             plt.tight_layout()
             plt.savefig("pca_projection.png")
             plt.show()
-
-
+            '''
+            '''
             # Original Graph
             h_V_graph = np.array(h_V.numpy()[0, :, :])
             print(h_V_graph.shape)
@@ -807,27 +808,26 @@ class EncLayer(nn.Module):
             #print(h_V_graph.shape)
             imgO = plt.imshow(h_V_graph)
             #plt.colorbar(imgO)
-            plt.savefig("h_V_decoded.png")
+            plt.title("h_V_decoded")
             plt.show()
 
             # New Graph
-            h_V_original_graph = np.array(h_V_original.numpy()[0, :, :])
+            h_V_original_graph = np.array(original.numpy()[0, :, :])
             h_V_original_graph = normalize(h_V_original_graph)
             #print(h_V_decoded_graph.shape)
             imgD = plt.imshow(h_V_original_graph)
             #plt.colorbar(imgD)
-            plt.savefig("h_V_original_graph.png")
+            plt.title("h_V_original_graph")
             plt.show()
-
-            encoded_graph = np.array(encoded.numpy()[0, :, :256])
+            
+            encoded_graph = np.array(encoded.numpy()[0, :, :128])
             encoded_graph = normalize(encoded_graph)
             activation_counts = np.all(encoded_graph==0, axis=0)
             dead_neurons = (activation_counts == 1).sum()
             print(f"Dead neurons: {dead_neurons}/{encoded.shape[2]}")
-            #print(encoded_graph.shape)
             imgE = plt.imshow(encoded_graph,)
-           # plt.colorbar(imgE)
-            plt.savefig("encoded.png")
+            plt.title("encoded")
+            #plt.savefig("encoded.png")
             plt.show()
             '''        
         return h_V, h_E, original, encoded              

@@ -30,7 +30,7 @@ def main(args):
     import subprocess
     from concurrent.futures import ProcessPoolExecutor    
     from utils import worker_init_fn, get_pdbs, loader_pdb, build_training_clusters, PDB_dataset, StructureDataset, StructureLoader
-    from model_utils import featurize, loss_smoothed, loss_nll, SAE_loss, get_std_opt, ProteinMPNN, store_inputs_and_losses, reinitialize_weights, remove_parallel_grads
+    from model_utils import featurize, loss_smoothed, loss_nll, SAE_loss, get_std_opt, ProteinMPNN, store_inputs_and_losses, reinitialize_weights, remove_parallel_grads, per_sample_SAE_loss, oldreinit_method
 
     sparse_weight, mse_weight, reinit_every_n_steps = args.sparse_weight, args.mse_weight, args.reinit_every_n_steps
     
@@ -96,20 +96,27 @@ def main(args):
                         dropout=args.dropout, 
                         augment_eps=args.backbone_noise)
     model.to(device)
-
+    
+    #reservoir_inputs = []
+    #reservoir_losses = []
+    
     if PATH:
         checkpoint = torch.load(PATH)
         total_step = checkpoint['step'] #write total_step from the checkpoint
         epoch = checkpoint['epoch'] #write epoch from the checkpoint
         model.load_state_dict(checkpoint['model_state_dict'])
         reinit_steps = checkpoint['reinit_step']
-        activity_mask = checkpoint['activity_mask'] 
+        activity_mask = checkpoint['activity_mask']
+        reservoir_inputs = checkpoint['reservoir_inputs']
+        reservoir_losses = checkpoint['reservoir_losses'] 
     else:
         model.load_state_dict(torch.load(base_folder + "v_48_020.pt", weights_only=False), strict=False)
         total_step = 0
         reinit_steps = 0
         epoch = 0
         activity_mask = torch.tensor(np.zeros((1024)))
+        reservoir_inputs = []
+        reservoir_losses = []
 
     SAE_params = [param for name, param in model.named_parameters() if "WS1" in name or "WS2" in name]
     optimizer = torch.optim.Adam([
@@ -150,8 +157,8 @@ def main(args):
                 reload_c += 1
             
             reservoir_size = args.reservoir_size # Used to collect info for reinitialization
-            reservoir_inputs = []
-            reservoir_losses = []
+            #reservoir_inputs = []
+            #reservoir_losses = []
             for batch_idx, batch in enumerate(loader_train):
                 count = 0
                 start_batch = time.time()
@@ -167,7 +174,7 @@ def main(args):
                 activity_mask += fired
                 epoch_activity_mask += fired
 
-                total_loss, sparse_loss, mse_loss, loss_av_smoothed = SAE_loss(original, encoded, decoded, args.sparse_weight)
+                total_loss, sparse_loss, mse_loss = SAE_loss(original, encoded, decoded, args.sparse_weight)
                 total_loss.backward()
 
                 # Ensure gradient descent doesn't change dictionary vector length
@@ -185,17 +192,22 @@ def main(args):
                 with torch.no_grad():
                     dead_neurons = (activity_mask == 0).nonzero(as_tuple=True)[0]
                     alive_neurons = (activity_mask > 0).nonzero(as_tuple=True)[0]
+                    per_epoch_dead_neurons = (epoch_activity_mask == 0).nonzero(as_tuple=True)[0]
                     print(f"Number of dead neurons: {len(dead_neurons)}")
                     if len(dead_neurons) > 0:
                         print(f'L2 norm before reinitialization {torch.linalg.vector_norm(model.encoder_layers[2].WS1.weight[dead_neurons], dim=1).mean().item()}')
-                        reinitialize_weights(model, optimizer, reservoir_inputs, reservoir_losses, alive_neurons, dead_neurons, device)
+                        reinitialize_weights(model, optimizer, reservoir_inputs, reservoir_losses, alive_neurons, per_epoch_dead_neurons, device)
                         print(f'L2 norm after reinitialization {torch.linalg.vector_norm(model.encoder_layers[2].WS1.weight[dead_neurons], dim=1).mean().item()}')
                         activity_mask.zero_()
+                        reservoir_losses = []
+                        reservoir_inputs = []
                         reinit_steps = 0
                         count = 0
                         need_to_reset_reinit = True
                     else:
                         activity_mask.zero_()
+                        reservoir_losses = []
+                        reservoir_inputs = []
                         reinit_steps = 0
                         count = 0
                         need_to_reset_reinit = True
@@ -207,10 +219,13 @@ def main(args):
             train_weights += torch.sum(mask_for_loss).cpu().data.numpy()
 
             if reinit_steps > (reinit_every_n_steps / 2) and need_to_reset_reinit == True:
+                reservoir_losses = []
+                reservoir_inputs = []
                 activity_mask.zero_()
                 need_to_reset_reinit = False
 
             model.eval()
+            print(reinit_steps)
             with torch.no_grad():
                 validation_sum, validation_weights, validation_sparse_loss, validation_mse_loss, validation_norm_loss = 0., 0., 0., 0., 0.
                 validation_acc = 0.
@@ -224,14 +239,14 @@ def main(args):
                     
                     mask_for_loss = mask*chain_M
                     loss, loss_av, true_false = loss_nll(S, log_probs, mask_for_loss)
-                    total_loss, sparse_loss, mse_loss, loss_av_smoothed = SAE_loss(original, encoded, decoded, sparse_weight)
+                    total_loss, sparse_loss, mse_loss = SAE_loss(original, encoded, decoded, sparse_weight)
 
                     validation_sum += torch.sum(loss * mask_for_loss).cpu().data.numpy()
                     validation_acc += torch.sum(true_false * mask_for_loss).cpu().data.numpy()
                     validation_weights += torch.sum(mask_for_loss).cpu().data.numpy()
                     validation_sparse_loss += torch.sum(sparse_loss * mask_for_loss).cpu().data.numpy()
                     validation_mse_loss += torch.sum(mse_loss * mask_for_loss).cpu().data.numpy()
-                    validation_norm_loss += torch.sum(loss_av_smoothed * mask_for_loss).cpu().data.numpy()
+                    #validation_norm_loss += torch.sum(loss_av_smoothed * mask_for_loss).cpu().data.numpy()
 
             train_loss = train_sum / train_weights
             train_accuracy = train_acc / train_weights
@@ -250,14 +265,16 @@ def main(args):
             dead_neurons = len((activity_mask == 0).nonzero(as_tuple=True)[0])
             per_epoch_dead_neurons = len((epoch_activity_mask == 0).nonzero(as_tuple=True)[0])
             epoch_activity_mask.zero_()
-            norm_loss_ = np.format_float_positional(np.float32(validation_norm_loss), unique=False, precision=3)
+            #norm_loss_ = np.format_float_positional(np.float32(validation_norm_loss), unique=False, precision=3)
 
             t1 = time.time()
             dt = np.format_float_positional(np.float32(t1-t0), unique=False, precision=1) 
             with open(logfile, 'a') as f:
                 f.write(f'epoch: {e+1}, time: {dt}, sparse loss: {sparse_loss_}, mse loss: {mse_loss_}, dead neurons: {dead_neurons}, per epoch dead neurons: {per_epoch_dead_neurons}, specificity: {specificity_}, valid_acc: {validation_accuracy_}\n')
-            print(f'epoch: {e+1}, time: {dt}, sparse loss: {sparse_loss_}, mse loss: {mse_loss_}, dead neurons: {dead_neurons}, per epoch dead neurons: {per_epoch_dead_neurons}, specificity: {specificity_}, valid_acc: {validation_accuracy_}')
+            print(f'epoch: {e+1}, time: {dt}, reinit step: {reinit_steps}, sparse loss: {sparse_loss_}, mse loss: {mse_loss_}, dead neurons: {dead_neurons}, per epoch dead neurons: {per_epoch_dead_neurons}, specificity: {specificity_}, valid_acc: {validation_accuracy_}')
             checkpoint_filename_last = base_folder+'model_weights/epoch_last.pt'.format(e+1, total_step)
+            print(len(reservoir_inputs))
+            print(len(reservoir_losses))
             torch.save({
                         'epoch': e+1,
                         'step': total_step,
@@ -267,6 +284,8 @@ def main(args):
                         'noise_level': args.backbone_noise,
                         'model_state_dict': model.state_dict(),
                         'optimizer_state_dict': optimizer.state_dict(),
+                        'reservoir_inputs': reservoir_inputs,
+                        'reservoir_losses': reservoir_losses,
                         }, checkpoint_filename_last)
 
             if (e+1) % args.save_model_every_n_epochs == 0:
@@ -281,6 +300,8 @@ def main(args):
                         'noise_level': args.backbone_noise, 
                         'model_state_dict': model.state_dict(),
                         'optimizer_state_dict': optimizer.state_dict(),
+                        'reservoir_inputs': reservoir_inputs,
+                        'reservoir_losses': reservoir_losses,
                         }, checkpoint_filename)
 
 if __name__ == "__main__":
@@ -294,8 +315,8 @@ if __name__ == "__main__":
     argparser.add_argument("--reinit_every_n_steps", type=int, default=10000, help='for default at 10k, starts storing dead neurons for previous n/2 = 5k steps')
     argparser.add_argument("--reservoir_size", type=int, default=10000, help='number of proteins to collect input and losses for reinitialization')
     ## Double check the first time you run to make sure the path is correct
-    argparser.add_argument("--path_for_training_data", type=str, default="my_path/pdb_2021aug02", help="path for loading training data") 
-    argparser.add_argument("--path_for_outputs", type=str, default="./exp_020", help="path for logs and model weights") # Outputs cannot write to this WAVE/bio/ML folder without write access
+    argparser.add_argument("--path_for_training_data", type=str, default="my_path/pdb_2021aug02", help="path for loading training data")  # pdb_2021aug02_sample for debugging
+    argparser.add_argument("--path_for_outputs", type=str, default="./exp_020", help="path for logs and model weights") # Outputs cannot write to this WAVE/bio/ML folder without write access ../../../../../../users2/unix/nmukkavilli/ProteinMPNN/sae_training/training/exp_020
     argparser.add_argument("--previous_checkpoint", type=str, default="", help="path for previous model weights, e.g. file.pt") # default = model_weights/epoch_last.pt
     ## Only change if running out of memory or training is too slow
     argparser.add_argument("--num_epochs", type=int, default=300, help="number of epochs to train for") # default = 200
