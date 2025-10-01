@@ -12,7 +12,7 @@ argparser.add_argument("--num_to_print", type=int, default=10)
 argparser.add_argument("--automate", action='store_true')
 args = argparser.parse_args()
 
-args.csv = 'newlsamples500_2'
+args.csv = 'dense'
 args.automate = False
 pdb_info_csv = '../data_labeling/' + args.csv + '_testcheck_pdb_info.csv' ## Set to TESTCHECK
 node_features_csv = '../node_features.csv'

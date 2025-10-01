@@ -5,7 +5,7 @@ from sklearn.decomposition import PCA
 from sklearn.preprocessing import normalize
 import matplotlib.pyplot as plt
 
-csv = 'newlsamples500_2'
+csv = 'dense'
 
 point = pd.DataFrame(pd.read_csv('point.csv', header=0).iloc[:, 1])
 encodings = pd.read_csv('../encodings/normalized_encodings_' + csv + '.csv')

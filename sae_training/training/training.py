@@ -4,10 +4,6 @@ import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 import gc
 import os
-os.environ["OMP_NUM_THREADS"] = "1"
-os.environ["MKL_NUM_THREADS"] = "1"
-os.environ["OPENBLAS_NUM_THREADS"] = "1"
-os.environ["NUMEXPR_NUM_THREADS"] = "1"
 import itertools
 from itertools import islice
 
@@ -36,7 +32,7 @@ def main(args):
     
     print("Using GPU" if (torch.cuda.is_available()) else "Using CPU")
 
-    device = torch.device(f"cuda:0")
+    device = torch.device(f"cuda")
     base_folder = time.strftime(args.path_for_outputs, time.localtime())
     
     if base_folder[-1] != '/':
@@ -97,9 +93,6 @@ def main(args):
                         augment_eps=args.backbone_noise)
     model.to(device)
     
-    #reservoir_inputs = []
-    #reservoir_losses = []
-    
     if PATH:
         checkpoint = torch.load(PATH)
         total_step = checkpoint['step'] #write total_step from the checkpoint
@@ -118,9 +111,17 @@ def main(args):
         reservoir_inputs = []
         reservoir_losses = []
 
-    SAE_params = [param for name, param in model.named_parameters() if "WS1" in name or "WS2" in name]
     optimizer = torch.optim.Adam([
-        {"params": SAE_params}], args.learning_rate) # standard lr = 1e-4
+        {"params": [param for name, param in model.sae_layers.named_parameters() if "0.W" in name]},
+        {"params": [param for name, param in model.sae_layers.named_parameters() if "1.W" in name]},
+        {"params": [param for name, param in model.sae_layers.named_parameters() if "2.W" in name]},
+    ], args.learning_rate)
+
+    #SAE_params = [param for name, param in model.named_parameters() if "WS1" in name or "WS2" in name]
+    #optimizer = torch.optim.Adam([
+    #    {"params": SAE_params}], args.learning_rate) # standard lr = 1e-4
+    
+
     if True:
         print("Parsing proteins")
         train_pdbs_gen = get_pdbs(train_loader, max_length=args.max_protein_length)
@@ -135,15 +136,14 @@ def main(args):
         loader_valid = StructureLoader(dataset_valid, batch_size=args.batch_size)
 
         reload_c = 0
-        need_to_reset_reinit = True # Flag for if the activity mask should be reset
         print("Starting training...")
         for e in range(args.num_epochs):
             t0 = time.time()
             e = epoch + e
-            model.train()
+            model.eval() # Now whole model is trained with model.eval()
             train_sum, train_weights = 0., 0.
             train_acc = 0.
-            epoch_activity_mask = torch.tensor(np.zeros((1024)))
+            epoch_activity_mask = torch.tensor(np.zeros((1024))) # Which neurons are active in each epoch
             if e % args.reload_data_every_n_epochs == 0:
                 if reload_c != 0:
                     train_pdbs_gen = get_pdbs(train_loader, max_length=args.max_protein_length)
@@ -157,13 +157,13 @@ def main(args):
                 reload_c += 1
             
             reservoir_size = args.reservoir_size # Used to collect info for reinitialization
-            #reservoir_inputs = []
-            #reservoir_losses = []
             for batch_idx, batch in enumerate(loader_train):
                 count = 0
                 start_batch = time.time()
                 X, S, mask, lengths, chain_M, residue_idx, mask_self, chain_encoding_all = featurize(batch, device)
                 elapsed_featurize = time.time() - start_batch
+
+
                 optimizer.zero_grad()
                 mask_for_loss = mask*chain_M
             
@@ -174,18 +174,19 @@ def main(args):
                 activity_mask += fired
                 epoch_activity_mask += fired
 
-                total_loss, sparse_loss, mse_loss = SAE_loss(original, encoded, decoded, args.sparse_weight)
+                total_loss, sparse_loss, mse_loss = SAE_loss(model, args.sparse_weight, mask_for_loss.bool())
                 total_loss.backward()
 
                 # Ensure gradient descent doesn't change dictionary vector length
-                remove_parallel_grads(model.encoder_layers)
+                remove_parallel_grads(model.sae_layers)
+                
                 optimizer.step()
 
                 total_step += 1
                 reinit_steps += 1
                 
-                # Collect all inputs and losses for all batches in loader for at least 100 batches
-                if reinit_steps > (reinit_every_n_steps - 100):
+                # Collect all inputs and losses for all batches in loader for half the reinit steps
+                if reinit_steps > (reinit_every_n_steps / 2):
                     reservoir_inputs, reservoir_losses = store_inputs_and_losses(count, reservoir_inputs, reservoir_losses, reservoir_size, original, encoded, decoded, mask, chain_M, sparse_weight)
             # Anthropic Reinitialization
             if reinit_steps > reinit_every_n_steps:
@@ -195,22 +196,21 @@ def main(args):
                     per_epoch_dead_neurons = (epoch_activity_mask == 0).nonzero(as_tuple=True)[0]
                     print(f"Number of dead neurons: {len(dead_neurons)}")
                     if len(dead_neurons) > 0:
-                        print(f'L2 norm before reinitialization {torch.linalg.vector_norm(model.encoder_layers[2].WS1.weight[dead_neurons], dim=1).mean().item()}')
+                        print(f'L2 norm before reinitialization {torch.linalg.vector_norm(model.sae_layers[2].WS1.weight[dead_neurons], dim=1).mean().item()}')
                         reinitialize_weights(model, optimizer, reservoir_inputs, reservoir_losses, alive_neurons, per_epoch_dead_neurons, device)
-                        print(f'L2 norm after reinitialization {torch.linalg.vector_norm(model.encoder_layers[2].WS1.weight[dead_neurons], dim=1).mean().item()}')
+                        print(f'L2 norm after reinitialization {torch.linalg.vector_norm(model.sae_layers[2].WS1.weight[dead_neurons], dim=1).mean().item()}')
                         activity_mask.zero_()
                         reservoir_losses = []
                         reservoir_inputs = []
                         reinit_steps = 0
                         count = 0
-                        need_to_reset_reinit = True
                     else:
+                        print("No dead neurons, not reinitializing")
                         activity_mask.zero_()
                         reservoir_losses = []
                         reservoir_inputs = []
                         reinit_steps = 0
                         count = 0
-                        need_to_reset_reinit = True
 
             # Calculate training loss
             loss, loss_av, true_false = loss_nll(S, log_probs, mask_for_loss)
@@ -218,14 +218,8 @@ def main(args):
             train_acc += torch.sum(true_false * mask_for_loss).cpu().data.numpy()
             train_weights += torch.sum(mask_for_loss).cpu().data.numpy()
 
-            if reinit_steps > (reinit_every_n_steps / 2) and need_to_reset_reinit == True:
-                reservoir_losses = []
-                reservoir_inputs = []
-                activity_mask.zero_()
-                need_to_reset_reinit = False
-
             model.eval()
-            print(reinit_steps)
+            print("Reinit steps:", reinit_steps)
             with torch.no_grad():
                 validation_sum, validation_weights, validation_sparse_loss, validation_mse_loss, validation_norm_loss = 0., 0., 0., 0., 0.
                 validation_acc = 0.
@@ -239,7 +233,7 @@ def main(args):
                     
                     mask_for_loss = mask*chain_M
                     loss, loss_av, true_false = loss_nll(S, log_probs, mask_for_loss)
-                    total_loss, sparse_loss, mse_loss = SAE_loss(original, encoded, decoded, sparse_weight)
+                    total_loss, sparse_loss, mse_loss = SAE_loss(model, sparse_weight, mask_for_loss.bool())
 
                     validation_sum += torch.sum(loss * mask_for_loss).cpu().data.numpy()
                     validation_acc += torch.sum(true_false * mask_for_loss).cpu().data.numpy()
@@ -273,8 +267,7 @@ def main(args):
                 f.write(f'epoch: {e+1}, time: {dt}, sparse loss: {sparse_loss_}, mse loss: {mse_loss_}, dead neurons: {dead_neurons}, per epoch dead neurons: {per_epoch_dead_neurons}, specificity: {specificity_}, valid_acc: {validation_accuracy_}\n')
             print(f'epoch: {e+1}, time: {dt}, reinit step: {reinit_steps}, sparse loss: {sparse_loss_}, mse loss: {mse_loss_}, dead neurons: {dead_neurons}, per epoch dead neurons: {per_epoch_dead_neurons}, specificity: {specificity_}, valid_acc: {validation_accuracy_}')
             checkpoint_filename_last = base_folder+'model_weights/epoch_last.pt'.format(e+1, total_step)
-            print(len(reservoir_inputs))
-            print(len(reservoir_losses))
+            print("Len of res inputs:", len(reservoir_inputs))
             torch.save({
                         'epoch': e+1,
                         'step': total_step,
@@ -308,7 +301,7 @@ if __name__ == "__main__":
     argparser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     ## Hyperparameters to update for better training results
     argparser.add_argument("--SAE_level", type=str, default='node', help='node or edge')
-    argparser.add_argument("--reinsert_SAE", type=bool, default=False, help="if the decoded embedding is fed back into the model")
+    argparser.add_argument("--reinsert_SAE", action="store_true", help="if the decoded embedding is fed back into the model")
     argparser.add_argument("--learning_rate", type=float, default=0.0001, help="range from 1e-2 to 1e-6")
     argparser.add_argument("--sparse_weight", type=float, default=1e-3, help='range from 10 to 1e-5')
     argparser.add_argument("--mse_weight", type=float, default=1.0, help='keep at 1.0 and change sparse_weight')

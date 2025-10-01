@@ -66,6 +66,7 @@ mean = not_SS_encodings.mean(axis=0)
 not_SS_basis_dim = pd.Series(0.0, index=mean.index)
 not_SS_basis_dim[stdv < 0.05] = mean[(stdv < 0.05)]
 
+
 SS_basis_dim = yes_SS_basis_dim - not_SS_basis_dim
 
 point = SS_basis_dim + ASA_basis_dim

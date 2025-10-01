@@ -180,15 +180,15 @@ def loss_smoothed(S, log_probs, mask, weight=0.1):
     loss_av = torch.sum(loss * mask) / 2000.0 #fixed 
     return loss, loss_av
 
-def SAE_loss(original, encoded, decoded, sparse_weight):
-        # Only takes into account the last layer activations which is collected in these arrays
+def SAE_loss(model, sparse_weight, mask):
+        # Now calculates all losses but only prints the last one
+        total_loss = 0
 
-        mse_loss = torch.nn.functional.mse_loss(decoded, original)
-        sparse_loss = torch.mean(torch.abs(encoded))
-        #mse_loss = torch.nn.functional.mse_loss(model.output_act[2], model.input_act[2])
-        #sparse_loss = torch.mean(torch.abs(model.encoded_act[2]))
-
-        total_loss = (sparse_weight * sparse_loss) + mse_loss
+        for i in range(3):
+            original, encoded, decoded = model.input_act[i], model.encoded_act[i], model.output_act[i]
+            mse_loss = torch.mean(torch.nn.functional.mse_loss(decoded, original, reduction='none')[mask])
+            sparse_loss = torch.mean(torch.abs(encoded)[mask])
+            total_loss += (sparse_weight * sparse_loss) + mse_loss
         return total_loss, sparse_loss.detach(), mse_loss.detach()
 
 # KL sparse loss as alternative to L1 loss
@@ -238,23 +238,24 @@ def cat_neighbors_nodes(h_nodes, h_neighbors, E_idx):
     return h_nn
 
 def remove_parallel_grads(weight):
-    with torch.no_grad():
-        for i in range(3):
-            W = weight[i].WS2.weight
-            W_normed = W / W.norm(dim=0, keepdim=True)
-            proj = (W.grad * W_normed).sum(dim=0, keepdim=True) * W_normed
-            W.grad -= proj
+    for i in range(3):
+        if weight[i].WS2.weight.grad != None:
+                W = weight[i].WS2.weight
+                W_normed = W / W.norm(dim=0, keepdim=True)
+                proj = (W.grad * W_normed).sum(dim=0, keepdim=True) * W_normed
+                W.grad -= proj
+        else:
+            print("grad = None")
         
 ## See Anthropic Neuron Resampling procedure in "Towards Monosemanticity..."
 # also see https://github.com/shehper/sparse-dictionary-learning/blob/main/autoencoder/autoencoder.py for code
 def store_inputs_and_losses(count, reservoir_inputs, reservoir_losses, reservoir_size, original, encoded, decoded, mask, chain_M, sparse_weight):
-    mask_for_loss = (mask * chain_M).detach().bool()
-    # Package [B, L, D] -> [B*L, D] and [B, L, K, D] -> [B*L*K, D]
-    input = torch.reshape(original[mask_for_loss].detach(), (-1, 128)) # Size of dense encoded dimensions
-    encoded = torch.reshape(encoded[mask_for_loss].detach(), (-1, 1024)) # 8x hidden dim
-    output = torch.reshape(decoded[mask_for_loss].detach(), (-1, 128))
-
-    batch_loss = per_sample_SAE_loss(input, encoded, output, sparse_weight)
+    mask_for_loss = torch.reshape((mask * chain_M).detach().bool(), (-1, 1))
+    # Package [B, L, D] or [B, L, K, D] -> [B*L, D] or [B*L*K, D]
+    input = torch.reshape(original.detach(), (-1, 128)) # Size of dense encoded dimensions
+    encoded = torch.reshape(encoded.detach(), (-1, 1024)) # 8x hidden dim
+    output = torch.reshape(decoded.detach(), (-1, 128))
+    batch_loss = per_sample_SAE_loss(input, encoded, output, sparse_weight, mask_for_loss)
 
     for i in range(batch_loss.shape[0]):
         count += 1
@@ -268,9 +269,9 @@ def store_inputs_and_losses(count, reservoir_inputs, reservoir_losses, reservoir
                 reservoir_losses[j] = batch_loss[i].cpu()
     return reservoir_inputs, reservoir_losses
 
-def per_sample_SAE_loss(input, encoded, output, sparse_weight):
-    mse_loss = torch.sum(torch.nn.functional.mse_loss(output, input, reduction='none'), dim=1).detach()
-    sparse_loss = torch.mean(torch.abs(encoded), dim=1).detach()
+def per_sample_SAE_loss(input, encoded, output, sparse_weight, mask):
+    mse_loss = torch.mean(torch.nn.functional.mse_loss(output, input, reduction='none')[mask.squeeze()], dim=1)#.detach()
+    sparse_loss = torch.mean(torch.abs(encoded)[mask.squeeze()], dim=1)#.detach()
     return mse_loss + sparse_weight * sparse_loss
 
 def reinitialize_weights(model, optimizer, reservoir_inputs, reservoir_losses, alive_neurons, dead_neurons, device):
@@ -292,16 +293,16 @@ def adjust_weights(model, alive_neurons, dead_neurons, resampling_indices):
     # Adjusts the 3rd SAE section since encoding step is repeated 3 times
 
     # Find average "length" of encoding vector
-    avg_enc_norm = torch.linalg.vector_norm(model.encoder_layers[2].WS1.weight[alive_neurons], dim=1).mean()
+    avg_enc_norm = torch.linalg.vector_norm(model.sae_layers[2].WS1.weight[alive_neurons], dim=1).mean()
     # Normalize inputs to unit L2 (make vector length=1)
     examples_unit_norm = F.normalize(resampling_indices, dim=1) * avg_enc_norm * 1e-3
     # Set decoder weights to dictionary vector (inputs)
-    model.encoder_layers[2].WS2.weight[:, dead_neurons] = examples_unit_norm.T
+    model.sae_layers[2].WS2.weight[:, dead_neurons] = examples_unit_norm.T
     # Multiply inputs by average encoded length and 0.2 to make them weakly activate
     adjusted_examples = examples_unit_norm * avg_enc_norm * 1e-3
     # Set encoder weights and set encoder biases to 0
-    model.encoder_layers[2].WS1.weight[dead_neurons, :] = adjusted_examples
-    model.encoder_layers[2].WS1.bias[dead_neurons] = 0
+    model.sae_layers[2].WS1.weight[dead_neurons, :] = adjusted_examples
+    model.sae_layers[2].WS1.bias[dead_neurons] = 0
 
 def reset_optimizer(optimizer, dead_neurons):
     for i, param in enumerate(optimizer.param_groups[0]['params']):
@@ -317,7 +318,7 @@ def oldreinit_method(model, dead_neurons, floor, fraction_reinit):
     if len(dead_neurons) > floor:
         num_to_reinit = max(1, int(fraction_reinit * len(dead_neurons)))
         indices = dead_neurons[torch.randperm(len(dead_neurons))[:num_to_reinit]]
-        encoder_weight = model.encoder_layers[2].WS1.weight
+        encoder_weight = model.sae_layers[2].WS1.weight
         #decoder_weight = model.encoder_layers[2].WS2.weight
         #encoder_bias = model.encoder_layers[2].WS1.bias
         #encoder_reinit_weight = torch.empty_like(encoder_weight)
@@ -327,7 +328,7 @@ def oldreinit_method(model, dead_neurons, floor, fraction_reinit):
         #decoder_reinit_weight = torch.empty_like(decoder_weight)
         #nn.init.kaiming_uniform_(decoder_reinit_weight)
         #decoder_weight = decoder_reinit_weight[:, indices]
-
+        
 ## Define ProteinMPNN
 class EncLayer(nn.Module):
     def __init__(self, num_hidden, num_in, dropout=0.1, num_heads=None, scale=30, SAE_level='node', reinsert_SAE=False):
@@ -346,7 +347,7 @@ class EncLayer(nn.Module):
         self.W1 = nn.Linear(num_hidden + num_in, num_hidden, bias=True)
         self.W2 = nn.Linear(num_hidden, num_hidden, bias=True)
         self.W3 = nn.Linear(num_hidden, num_hidden, bias=True)
-        
+        '''
         # SAE Layers
         self.SAE_act = nn.ReLU()
         self.WS1 = nn.Linear(num_hidden, num_hidden*8, bias=True) # Dense encodings expanded by 8 times i.e. [B, L, 128] -> [B, L, 1024]
@@ -356,6 +357,7 @@ class EncLayer(nn.Module):
         nn.init.kaiming_uniform_(self.WS2.weight)
 
         self.normalize_decoder()
+        '''
 
         # Edge Layers
         self.W11 = nn.Linear(num_hidden + num_in, num_hidden, bias=True)
@@ -363,31 +365,31 @@ class EncLayer(nn.Module):
         self.W13 = nn.Linear(num_hidden, num_hidden, bias=True)
         self.act = torch.nn.GELU()
         self.dense = PositionWiseFeedForward(num_hidden, num_hidden * 4)
-
+    '''
     def normalize_decoder(self):
         with torch.no_grad():
             W = self.WS2.weight
             W /= W.norm(dim=0, keepdim=True)
-
-    def forward(self, h_V, h_E, E_idx, SAE_level='node', reinsert_SAE = False, mask_V=None, mask_attend=None):
+    '''
+    def forward(self, h_V, h_E, E_idx, SAE_level='node', reinsert_SAE=False, mask_V=None, mask_attend=None):
         """ Parallel computation of full transformer layer """
-        if True:
-            h_EV = cat_neighbors_nodes(h_V, h_E, E_idx)
-            h_V_expand = h_V.unsqueeze(-2).expand(-1,-1,h_EV.size(-2),-1)
-            h_EV = torch.cat([h_V_expand, h_EV], -1)
-            h_message = self.W3(self.act(self.W2(self.act(self.W1(h_EV))))).detach()
-            
-            if mask_attend is not None:
-                h_message = mask_attend.unsqueeze(-1) * h_message
-            dh = torch.sum(h_message, -2) / self.scale
-            h_V = self.norm1(h_V + self.dropout1(dh))
+        
+        h_EV = cat_neighbors_nodes(h_V, h_E, E_idx)
+        h_V_expand = h_V.unsqueeze(-2).expand(-1,-1,h_EV.size(-2),-1)
+        h_EV = torch.cat([h_V_expand, h_EV], -1)
+        h_message = self.W3(self.act(self.W2(self.act(self.W1(h_EV))))).detach()
+        if mask_attend is not None:
+            h_message = mask_attend.unsqueeze(-1) * h_message
+        dh = torch.sum(h_message, -2) / self.scale
+        h_V = self.norm1(h_V + self.dropout1(dh))
 
-            dh = self.dense(h_V)
-            h_V = self.norm2(h_V + self.dropout2(dh)).detach() # 
-            if mask_V is not None:
-                mask_V = mask_V.unsqueeze(-1)
-                h_V = mask_V * h_V
+        dh = self.dense(h_V)
+        h_V = self.norm2(h_V + self.dropout2(dh)).detach() # 
+        if mask_V is not None:
+             mask_V = mask_V.unsqueeze(-1)
+             h_V = mask_V * h_V
 
+        '''
         ## Node SAE
         # SAE is always applied after norm and dropout layers which will change if we want to probe previous MLP layers
         if SAE_level == 'node':
@@ -397,14 +399,14 @@ class EncLayer(nn.Module):
                 decoded = h_V
             else:
                 decoded = self.WS2(encoded)
-
-        if True:
-            h_EV = cat_neighbors_nodes(h_V, h_E, E_idx)
-            h_V_expand = h_V.unsqueeze(-2).expand(-1,-1,h_EV.size(-2),-1)
-            h_EV = torch.cat([h_V_expand, h_EV], -1)
-            h_message = self.W13(self.act(self.W12(self.act(self.W11(h_EV)))))
-            h_E = self.norm3(h_E + self.dropout3(h_message)).detach()
+        '''
+        h_EV = cat_neighbors_nodes(h_V, h_E, E_idx)
+        h_V_expand = h_V.unsqueeze(-2).expand(-1,-1,h_EV.size(-2),-1)
+        h_EV = torch.cat([h_V_expand, h_EV], -1)
+        h_message = self.W13(self.act(self.W12(self.act(self.W11(h_EV)))))
+        h_E = self.norm3(h_E + self.dropout3(h_message)).detach()
         
+        '''
         ## Edge SAE
         if SAE_level == 'edge':
             encoded = self.SAE_act(self.WS1(h_E - self.WS2.bias))
@@ -413,8 +415,35 @@ class EncLayer(nn.Module):
                 decoded = h_E
             else:
                 decoded = self.WS2(encoded)
+        '''
+        return h_V, h_E#, original, encoded, decoded
 
-        return h_V, h_E, original, encoded, decoded
+class SAELayer(nn.Module):
+    def __init__(self, num_in, expansion):
+        super(SAELayer, self).__init__()
+        self.num_hidden = num_in
+        self.expansion = expansion
+
+        self.WS1 = nn.Linear(num_in, num_in*8, bias=True) # Dense encodings expanded by 8 times i.e. [B, L, 128] -> [B, L, 1024]
+        self.WS2 = nn.Linear(num_in*8, num_in, bias=True)
+        self.act = nn.ReLU()
+        nn.init.kaiming_uniform_(self.WS1.weight)
+        nn.init.kaiming_uniform_(self.WS2.weight)
+
+        self.normalize_decoder()
+
+    # Make sure decoder weights columns are unit norm, remove other gradients
+    def normalize_decoder(self):
+        with torch.no_grad():
+            W = self.WS2.weight
+            W  = W / W.norm(dim=0, keepdim=True)
+            self.WS2.weight.copy_(W)
+
+    def forward(self, X):
+        encoded = self.act(self.WS1(X - self.WS2.bias)) # Use pre-encoder bias tied to second set of weights
+        decoded = self.WS2(encoded)
+    
+        return encoded, decoded
 
 class DecLayer(nn.Module):
     def __init__(self, num_hidden, num_in, dropout=0.1, num_heads=None, scale=30):
@@ -582,7 +611,7 @@ class ProteinFeatures(nn.Module):
 class ProteinMPNN(nn.Module):
     def __init__(self, num_letters=21, node_features=128, edge_features=128,
         hidden_dim=128, num_encoder_layers=3, num_decoder_layers=3,
-        vocab=21, k_neighbors=32, augment_eps=0.1, dropout=0.1):
+        vocab=21, k_neighbors=32, augment_eps=0.1, dropout=0.1, expansion=8):
         super(ProteinMPNN, self).__init__()
 
         # Hyperparameters
@@ -601,6 +630,11 @@ class ProteinMPNN(nn.Module):
             for _ in range(num_encoder_layers)
         ])
 
+        self.sae_layers = nn.ModuleList([
+            SAELayer(hidden_dim, hidden_dim*expansion)
+            for _ in range(num_encoder_layers)
+        ])
+
         # Decoder layers
         self.decoder_layers = nn.ModuleList([
             DecLayer(hidden_dim, hidden_dim*3, dropout=dropout)
@@ -608,28 +642,32 @@ class ProteinMPNN(nn.Module):
         ])
         self.W_out = nn.Linear(hidden_dim, num_letters, bias=True)
 
-        #for p in self.parameters():
-        #    if p.dim() > 1:
-        #        nn.init.kaiming_uniform_(p) # Changed from kaiming_normal in line with SAE literature
-        #
+    def forward(self, X, S, mask, chain_M, residue_idx, chain_encoding_all, SAE_level, reinsert_SAE=False):
         
-
-    def forward(self, X, S, mask, chain_M, residue_idx, chain_encoding_all, SAE_level, reinsert_SAE):
         """ Graph-conditioned sequence model """
         device=X.device
         # Prepare node and edge embeddings
-        E, E_idx = self.features(X, mask, residue_idx, chain_encoding_all)
-        h_V = torch.zeros((E.shape[0], E.shape[1], E.shape[-1]), device=E.device)
-        h_E = self.W_e(E)
-        # Encoder is unmasked self-attention
-        mask_attend = gather_nodes(mask.unsqueeze(-1),  E_idx).squeeze(-1)
-        mask_attend = mask.unsqueeze(-1) * mask_attend
+        if True:
+        #with torch.no_grad():
+            E, E_idx = self.features(X, mask, residue_idx, chain_encoding_all)
+            h_V = torch.zeros((E.shape[0], E.shape[1], E.shape[-1]), device=E.device)
+            h_E = self.W_e(E)
+            # Encoder is unmasked self-attention
+            mask_attend = gather_nodes(mask.unsqueeze(-1),  E_idx).squeeze(-1)
+            mask_attend = mask.unsqueeze(-1) * mask_attend
         
-        self.input_act= []
-        self.encoded_act = []
-        self.output_act = []
-        for layer in self.encoder_layers:
-            h_V, h_E, original, encoded, decoded = torch.utils.checkpoint.checkpoint(layer, h_V, h_E, E_idx, SAE_level, reinsert_SAE, mask, mask_attend, use_reentrant=True)
+            self.input_act= []
+            self.encoded_act = []
+            self.output_act = []
+            for layer in self.encoder_layers:
+                #h_V, h_E, original, encoded, decoded = torch.utils.checkpoint.checkpoint(layer, h_V, h_E, E_idx, SAE_level, reinsert_SAE, mask, mask_attend, use_reentrant=True)
+                    h_V, h_E = layer(h_V, h_E, E_idx, mask, mask_attend)
+                    #h_V, h_E = torch.utils.checkpoint.checkpoint(layer, h_V, h_E, E_idx, mask, mask_attend, use_reentrant=True)
+                    if SAE_level == 'edge':
+                        self.input_act.append(torch.reshape(h_E, (1, -1, h_E.shape[3])))
+                    else:
+                        self.input_act.append(h_V)
+            '''
             if SAE_level == 'edge':
                 self.input_act.append(torch.reshape(original, (1, -1, original.shape[3])))
                 self.encoded_act.append(torch.reshape(encoded, (1, -1, encoded.shape[3])))
@@ -642,7 +680,20 @@ class ProteinMPNN(nn.Module):
                 self.input_act.append(original)
                 self.encoded_act.append(encoded)
                 self.output_act.append(decoded)
-        with torch.no_grad(): # Don't collect gradients for decoder
+            '''
+        for idx, layer in enumerate(self.sae_layers):
+            encoded, decoded = layer(self.input_act[idx])
+            self.encoded_act.append(encoded)
+            self.output_act.append(decoded)
+
+        if reinsert_SAE == True:
+            if SAE_level == 'node':
+                h_V = self.output_act[2]
+            elif SAE_level == 'edge':
+                h_E = self.output_act[2]
+
+        if True:
+        #with torch.no_grad(): # Don't collect gradients for decoder
             # Concatenate sequence embeddings for autoregressive decoder
             h_S = self.W_s(S)
             h_ES = cat_neighbors_nodes(h_S, h_E, E_idx)
@@ -650,7 +701,6 @@ class ProteinMPNN(nn.Module):
             # Build encoder embeddings
             h_EX_encoder = cat_neighbors_nodes(torch.zeros_like(h_S), h_E, E_idx)
             h_EXV_encoder = cat_neighbors_nodes(h_V, h_EX_encoder, E_idx)
-
 
             chain_M = chain_M*mask #update chain_M to include missing regions
             decoding_order = torch.argsort((chain_M+0.0001)*(torch.abs(torch.randn(chain_M.shape, device=device)))) #[numbers will be smaller for places where chain_M = 0.0 and higher for places where chain_M = 1.0]
@@ -670,7 +720,8 @@ class ProteinMPNN(nn.Module):
                 h_V = torch.utils.checkpoint.checkpoint(layer, h_V, h_ESV, mask, use_reentrant=True)
             logits = self.W_out(h_V)
             log_probs = F.log_softmax(logits, dim=-1)
-        return log_probs, original, encoded, decoded
+
+        return log_probs, self.input_act[2], self.encoded_act[2], self.output_act[2]#original, encoded, decoded
         
 class NoamOpt:
     "Optim wrapper that implements rate."
