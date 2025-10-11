@@ -183,7 +183,6 @@ def loss_smoothed(S, log_probs, mask, weight=0.1):
 def SAE_loss(model, sparse_weight, mask):
         # Now calculates all losses but only prints the last one
         total_loss = 0
-
         for i in range(3):
             original, encoded, decoded = model.input_act[i], model.encoded_act[i], model.output_act[i]
             mse_loss = torch.mean(torch.nn.functional.mse_loss(decoded, original, reduction='none')[mask])
@@ -250,31 +249,42 @@ def remove_parallel_grads(weight):
 ## See Anthropic Neuron Resampling procedure in "Towards Monosemanticity..."
 # also see https://github.com/shehper/sparse-dictionary-learning/blob/main/autoencoder/autoencoder.py for code
 def store_inputs_and_losses(count, reservoir_inputs, reservoir_losses, reservoir_size, original, encoded, decoded, mask, chain_M, sparse_weight):
+    '''
     mask_for_loss = torch.reshape((mask * chain_M).detach().bool(), (-1, 1))
     # Package [B, L, D] or [B, L, K, D] -> [B*L, D] or [B*L*K, D]
     input = torch.reshape(original.detach(), (-1, 128)) # Size of dense encoded dimensions
     encoded = torch.reshape(encoded.detach(), (-1, 1024)) # 8x hidden dim
     output = torch.reshape(decoded.detach(), (-1, 128))
+    '''
+    mask_for_loss = (mask*chain_M).detach().bool()
+    input = original.detach()
+    encoded = encoded.detach()
+    output = decoded.detach()
+    
     batch_loss = per_sample_SAE_loss(input, encoded, output, sparse_weight, mask_for_loss)
 
-    for i in range(batch_loss.shape[0]):
+    for i in range(batch_loss.shape[0]): # B*L or B*L*K
         count += 1
         if len(reservoir_inputs) < reservoir_size:
-            reservoir_inputs.append(input[i, :].cpu())
+            reservoir_inputs.append(torch.reshape(input, (-1, 128))[i, :].cpu()) # Reshape [B, L, D] -> [B*L, D] or [B, L, K, D] -> [B*L*K, D]
             reservoir_losses.append(batch_loss[i].cpu())
         else:
             j = random.randint(0, count-1)
             if j < reservoir_size:
-                reservoir_inputs[j] = input[i, :].cpu()
+                reservoir_inputs[j] = torch.reshape(input, (-1, 128))[i, :].cpu()
                 reservoir_losses[j] = batch_loss[i].cpu()
     return reservoir_inputs, reservoir_losses
 
 def per_sample_SAE_loss(input, encoded, output, sparse_weight, mask):
-    mse_loss = torch.mean(torch.nn.functional.mse_loss(output, input, reduction='none')[mask.squeeze()], dim=1)#.detach()
-    sparse_loss = torch.mean(torch.abs(encoded)[mask.squeeze()], dim=1)#.detach()
+    #mse_loss = torch.mean(torch.nn.functional.mse_loss(output, input, reduction='none')[mask.squeeze()], dim=1)#.detach()
+    #sparse_loss = torch.mean(torch.abs(encoded)[mask.squeeze()], dim=1)#.detach()
+
+    # Calculates loss of shape [B, L, K, D] -> mask applied -> Reshaped to [B*L*K, D] -> mean loss for each sample -> [B*L*K] 
+    mse_loss = torch.mean(torch.reshape((torch.nn.functional.mse_loss(output, input, reduction='none')[mask]), (-1, 128)), dim=1)
+    sparse_loss = torch.mean(torch.reshape((torch.abs(encoded)[mask]), (-1, 1024)), dim=1)
     return mse_loss + sparse_weight * sparse_loss
 
-def reinitialize_weights(model, optimizer, reservoir_inputs, reservoir_losses, alive_neurons, dead_neurons, device):
+def reinit_anthropic(model, optimizer, reservoir_inputs, reservoir_losses, alive_neurons, dead_neurons, device):
     inputs = torch.stack(reservoir_inputs)
     losses = torch.stack(reservoir_losses)
 
@@ -299,12 +309,12 @@ def adjust_weights(model, alive_neurons, dead_neurons, resampling_indices):
     # Set decoder weights to dictionary vector (inputs)
     model.sae_layers[2].WS2.weight[:, dead_neurons] = examples_unit_norm.T
     # Multiply inputs by average encoded length and 0.2 to make them weakly activate
-    adjusted_examples = examples_unit_norm * avg_enc_norm * 1e-3
+    adjusted_examples = examples_unit_norm * avg_enc_norm * 0.2
     # Set encoder weights and set encoder biases to 0
     model.sae_layers[2].WS1.weight[dead_neurons, :] = adjusted_examples
     model.sae_layers[2].WS1.bias[dead_neurons] = 0
 
-def reset_optimizer(optimizer, dead_neurons):
+def reset_optimizer(optimizer, dead_neurons, device):
     for i, param in enumerate(optimizer.param_groups[0]['params']):
         param_state = optimizer.state[param]
         if i in [0, 1]:
@@ -314,20 +324,39 @@ def reset_optimizer(optimizer, dead_neurons):
             param_state['exp_avg'][:, dead_neurons] = 0
             param_state['exp_avg_sq'][:, dead_neurons] = 0
 
-def oldreinit_method(model, dead_neurons, floor, fraction_reinit):
-    if len(dead_neurons) > floor:
-        num_to_reinit = max(1, int(fraction_reinit * len(dead_neurons)))
-        indices = dead_neurons[torch.randperm(len(dead_neurons))[:num_to_reinit]]
-        encoder_weight = model.sae_layers[2].WS1.weight
-        #decoder_weight = model.encoder_layers[2].WS2.weight
-        #encoder_bias = model.encoder_layers[2].WS1.bias
-        #encoder_reinit_weight = torch.empty_like(encoder_weight)
-        #nn.init.kaiming_uniform_(encoder_reinit_weight)
-        #encoder_weight = encoder_reinit_weight[indices, :]
-        #encoder_bias[indices] = 0
-        #decoder_reinit_weight = torch.empty_like(decoder_weight)
-        #nn.init.kaiming_uniform_(decoder_reinit_weight)
-        #decoder_weight = decoder_reinit_weight[:, indices]
+def reinit_classic(model, optimizer, dead_neurons, device, fraction_reinit=1):
+    num_to_reinit = max(1, int(fraction_reinit * len(dead_neurons)))
+
+    indices = dead_neurons[torch.randperm(len(dead_neurons))[:num_to_reinit]]
+
+    WS1 = model.sae_layers[2].WS1
+    WS2 = model.sae_layers[2].WS2
+    idx = indices.to(WS1.weight.device)
+
+    # 1. Generate full random weight tensors (same shape)
+    new_W1 = torch.empty_like(WS1.weight)
+    new_W2 = torch.empty_like(WS2.weight)
+
+    nn.init.kaiming_uniform_(new_W1)
+    nn.init.kaiming_uniform_(new_W2)
+
+    # 2. Replace only the dead neurons
+    WS1.weight[idx, :] = new_W1[idx, :]
+    WS2.weight[:, idx] = new_W2[:, idx]
+
+    # 3. Reset biases
+    WS1.bias[idx] = 0
+    #WS2.bias[idx] = 0
+
+    '''
+    WS1_bias, WS1_weight, WS2_weight = model.sae_layers[2].WS1.bias.data, model.sae_layers[2].WS1.weight.data, model.sae_layers[2].WS2.weight.data
+    #WS1_bias[indices, :] = 0
+    nn.init.kaiming_uniform_(WS1_weight[indices, :])
+    nn.init.kaiming_uniform_(WS2_weight[:, indices])
+    WS1_bias[indices] = 0
+    #WS2_bias[indices] = 0
+    '''
+    reset_optimizer(optimizer, indices, device)
         
 ## Define ProteinMPNN
 class EncLayer(nn.Module):
@@ -378,6 +407,7 @@ class EncLayer(nn.Module):
         h_V_expand = h_V.unsqueeze(-2).expand(-1,-1,h_EV.size(-2),-1)
         h_EV = torch.cat([h_V_expand, h_EV], -1)
         h_message = self.W3(self.act(self.W2(self.act(self.W1(h_EV))))).detach()
+
         if mask_attend is not None:
             h_message = mask_attend.unsqueeze(-1) * h_message
         dh = torch.sum(h_message, -2) / self.scale
@@ -643,12 +673,10 @@ class ProteinMPNN(nn.Module):
         self.W_out = nn.Linear(hidden_dim, num_letters, bias=True)
 
     def forward(self, X, S, mask, chain_M, residue_idx, chain_encoding_all, SAE_level, reinsert_SAE=False):
-        
         """ Graph-conditioned sequence model """
         device=X.device
         # Prepare node and edge embeddings
-        if True:
-        #with torch.no_grad():
+        with torch.no_grad():
             E, E_idx = self.features(X, mask, residue_idx, chain_encoding_all)
             h_V = torch.zeros((E.shape[0], E.shape[1], E.shape[-1]), device=E.device)
             h_E = self.W_e(E)
@@ -664,23 +692,10 @@ class ProteinMPNN(nn.Module):
                     h_V, h_E = layer(h_V, h_E, E_idx, mask, mask_attend)
                     #h_V, h_E = torch.utils.checkpoint.checkpoint(layer, h_V, h_E, E_idx, mask, mask_attend, use_reentrant=True)
                     if SAE_level == 'edge':
-                        self.input_act.append(torch.reshape(h_E, (1, -1, h_E.shape[3])))
+                        self.input_act.append(h_E)#torch.reshape(h_E, (1, -1, h_E.shape[3])))
                     else:
                         self.input_act.append(h_V)
-            '''
-            if SAE_level == 'edge':
-                self.input_act.append(torch.reshape(original, (1, -1, original.shape[3])))
-                self.encoded_act.append(torch.reshape(encoded, (1, -1, encoded.shape[3])))
-                self.output_act.append(torch.reshape(decoded, (1, -1, decoded.shape[3])))
-            elif SAE_level == 'node':
-                self.input_act.append(original)
-                self.encoded_act.append(encoded)
-                self.output_act.append(decoded)
-            else:
-                self.input_act.append(original)
-                self.encoded_act.append(encoded)
-                self.output_act.append(decoded)
-            '''
+
         for idx, layer in enumerate(self.sae_layers):
             encoded, decoded = layer(self.input_act[idx])
             self.encoded_act.append(encoded)
@@ -692,8 +707,7 @@ class ProteinMPNN(nn.Module):
             elif SAE_level == 'edge':
                 h_E = self.output_act[2]
 
-        if True:
-        #with torch.no_grad(): # Don't collect gradients for decoder
+        with torch.no_grad(): # Don't collect gradients for decoder
             # Concatenate sequence embeddings for autoregressive decoder
             h_S = self.W_s(S)
             h_ES = cat_neighbors_nodes(h_S, h_E, E_idx)

@@ -18,8 +18,8 @@ def main(args):
     import os.path
     import subprocess
     import matplotlib.pyplot as plt
-    from protein_mpnn_utils import loss_nll, loss_smoothed, gather_edges, gather_nodes, gather_nodes_t, cat_neighbors_nodes, _scores, _S_to_seq, tied_featurize, parse_PDB, parse_fasta, create_labels
-    from protein_mpnn_utils import StructureDataset, StructureDatasetPDB, ProteinMPNN
+    from decoder_mpnn_utils import loss_nll, loss_smoothed, gather_edges, gather_nodes, gather_nodes_t, cat_neighbors_nodes, _scores, _S_to_seq, tied_featurize, parse_PDB, parse_fasta, create_labels
+    from decoder_mpnn_utils import StructureDataset, StructureDatasetPDB, ProteinMPNN, Decoder
     if args.seed:
         seed=args.seed
     else:
@@ -188,6 +188,18 @@ def main(args):
     model.load_state_dict(checkpoint['model_state_dict'], strict=False)
     model.eval()
 
+    dec_model = Decoder(num_letters=21,
+                        node_features=hidden_dim,
+                        edge_features=hidden_dim, 
+                        hidden_dim=hidden_dim,
+                        num_encoder_layers=num_layers, 
+                        num_decoder_layers=num_layers, 
+                        augment_eps=args.backbone_noise, 
+                        k_neighbors=checkpoint['num_edges'])
+    dec_model.to(device)
+    dec_model.load_state_dict(checkpoint['model_state_dict'], strict=False)
+    dec_model.eval()
+
     if print_all:
         print(40*'-')
         print('Number of edges:', checkpoint['num_edges'])
@@ -226,159 +238,47 @@ def main(args):
     
     csv_output = 'encodings/output_' + args.csv_output + '.csv'
 
-    # Timing
-    start_time = time.time()
-    total_residues = 0
-    protein_list = []
-    total_step = 0
     # Validation epoch
     with torch.no_grad():
-        test_sum, test_weights = 0., 0.
         for ix, protein in enumerate(dataset_valid):
-            score_list = []
-            global_score_list = []
-            all_probs_list = []
-            all_log_probs_list = []
-            S_sample_list = []
             batch_clones = [copy.deepcopy(protein) for i in range(BATCH_COPIES)]
             X, S, mask, lengths, chain_M, chain_encoding_all, chain_list_list, visible_list_list, masked_list_list, masked_chain_length_list_list, chain_M_pos, omit_AA_mask, residue_idx, dihedral_mask, tied_pos_list_of_lists_list, pssm_coef, pssm_bias, pssm_log_odds_all, bias_by_res_all, tied_beta = tied_featurize(batch_clones, device, chain_id_dict, fixed_positions_dict, omit_AA_dict, tied_positions_dict, pssm_dict, bias_by_res_dict, ca_only=args.ca_only)
-            #print(mask.shape)
-            pssm_log_odds_mask = (pssm_log_odds_all > args.pssm_threshold).float() #1.0 for true, 0.0 for false
             name_ = batch_clones[0]['name']
-            if args.score_only:
-                loop_c = 0 
-                if args.path_to_fasta:
-                    fasta_names, fasta_seqs = parse_fasta(args.path_to_fasta, omit=["/"])
-                    loop_c = len(fasta_seqs)
-                for fc in range(1+loop_c):
-                    if fc == 0:
-                        structure_sequence_score_file = base_folder + '/score_only/' + batch_clones[0]['name'] + f'_pdb'
-                    else:
-                        structure_sequence_score_file = base_folder + '/score_only/' + batch_clones[0]['name'] + f'_fasta_{fc}'
-                    native_score_list = []
-                    global_native_score_list = []
-                    if fc > 0:
-                        input_seq_length = len(fasta_seqs[fc-1])
-                        S_input = torch.tensor([alphabet_dict[AA] for AA in fasta_seqs[fc-1]], device=device)[None,:].repeat(X.shape[0], 1)
-                        S[:,:input_seq_length] = S_input #assumes that S and S_input are alphabetically sorted for masked_chains
-                    for j in range(NUM_BATCHES):
-                        randn_1 = torch.randn(chain_M.shape, device=X.device)
-                        log_probs = model(X, S, mask, chain_M*chain_M_pos, residue_idx, chain_encoding_all, randn_1)
-                        mask_for_loss = mask*chain_M*chain_M_pos
-                        scores = _scores(S, log_probs, mask_for_loss)
-                        native_score = scores.cpu().data.numpy()
-                        native_score_list.append(native_score)
-                        global_scores = _scores(S, log_probs, mask)
-                        global_native_score = global_scores.cpu().data.numpy()
-                        global_native_score_list.append(global_native_score)
-                    native_score = np.concatenate(native_score_list, 0)
-                    global_native_score = np.concatenate(global_native_score_list, 0)
-                    ns_mean = native_score.mean()
-                    ns_mean_print = np.format_float_positional(np.float32(ns_mean), unique=False, precision=4)
-                    ns_std = native_score.std()
-                    ns_std_print = np.format_float_positional(np.float32(ns_std), unique=False, precision=4)
+            randn_1 = torch.randn(chain_M.shape, device=X.device)
+            h_V, h_E, original, encoded, decoded, E_idx = model(X, S, mask, chain_M*chain_M_pos, residue_idx, chain_encoding_all, randn_1, SAE_level=args.SAE_level)
+            max_activation = torch.max(h_V) #-1
+            min_activation = torch.min(h_V) #4
 
-                    global_ns_mean = global_native_score.mean()
-                    global_ns_mean_print = np.format_float_positional(np.float32(global_ns_mean), unique=False, precision=4)
-                    global_ns_std = global_native_score.std()
-                    global_ns_std_print = np.format_float_positional(np.float32(global_ns_std), unique=False, precision=4)
+            #for dim in range(30):
+            #dim = 9
+            #for dim in range(h_V.shape[-1]):
+            dim = 38
+            for aa in range(h_V.shape[-2]):
+                if aa - 10 < 0:
+                    min = 0
+                else:
+                    min = aa - 10
+                val_range = np.linspace(min_activation, max_activation, 50)
+                prolineprobs = []
+                for val in val_range:
+                    # I needed to change this to be making a copy of h-V
+                    h_V_new = h_V.clone()
+                    h_V_new.data[:, min:aa, dim] = val
+                    log_probs = dec_model(S, mask, chain_M*chain_M_pos, h_V_new, h_E, E_idx, randn_1, use_input_decoding_order=False)
+                    P_prob = log_probs.data[:, min:aa, 12].mean() # Proline
+                    prolineprobs.append(P_prob)
 
-                    ns_sample_size = native_score.shape[0]
-                    seq_str = _S_to_seq(S[0,], chain_M[0,])
-                    np.savez(structure_sequence_score_file, score=native_score, global_score=global_native_score, S=S[0,].cpu().numpy(), seq_str=seq_str)
-                    if print_all:
-                        if fc == 0:
-                            print(f'Score for {name_} from PDB, mean: {ns_mean_print}, std: {ns_std_print}, sample size: {ns_sample_size},  global score, mean: {global_ns_mean_print}, std: {global_ns_std_print}, sample size: {ns_sample_size}')
-                        else:
-                            print(f'Score for {name_}_{fc} from FASTA, mean: {ns_mean_print}, std: {ns_std_print}, sample size: {ns_sample_size},  global score, mean: {global_ns_mean_print}, std: {global_ns_std_print}, sample size: {ns_sample_size}')
-            elif args.conditional_probs_only:
-                if print_all:
-                    print(f'Calculating conditional probabilities for {name_}')
-                conditional_probs_only_file = base_folder + '/conditional_probs_only/' + batch_clones[0]['name']
-                log_conditional_probs_list = []
-                for j in range(NUM_BATCHES):
-                    randn_1 = torch.randn(chain_M.shape, device=X.device)
-                    log_conditional_probs = model.conditional_probs(X, S, mask, chain_M*chain_M_pos, residue_idx, chain_encoding_all, randn_1, args.conditional_probs_only_backbone)
-                    log_conditional_probs_list.append(log_conditional_probs.cpu().numpy())
-                concat_log_p = np.concatenate(log_conditional_probs_list, 0) #[B, L, 21]
-                mask_out = (chain_M*chain_M_pos*mask)[0,].cpu().numpy()
-                np.savez(conditional_probs_only_file, log_p=concat_log_p, S=S[0,].cpu().numpy(), mask=mask[0,].cpu().numpy(), design_mask=mask_out)
-            elif args.unconditional_probs_only:
-                if print_all:
-                    print(f'Calculating sequence unconditional probabilities for {name_}')
-                unconditional_probs_only_file = base_folder + '/unconditional_probs_only/' + batch_clones[0]['name']
-                log_unconditional_probs_list = []
-                for j in range(NUM_BATCHES):
-                    log_unconditional_probs = model.unconditional_probs(X, mask, residue_idx, chain_encoding_all)
-                    log_unconditional_probs_list.append(log_unconditional_probs.cpu().numpy())
-                concat_log_p = np.concatenate(log_unconditional_probs_list, 0) #[B, L, 21]
-                mask_out = (chain_M*chain_M_pos*mask)[0,].cpu().numpy()
-                np.savez(unconditional_probs_only_file, log_p=concat_log_p, S=S[0,].cpu().numpy(), mask=mask[0,].cpu().numpy(), design_mask=mask_out)
-            elif args.SAE_level == 'node' and args.return_log_probs != True:
-                error, res_labels = create_labels(args.pdb_path, args.SAE_level)
-                if error != True:
-                    randn_1 = torch.randn(chain_M.shape, device=X.device)
-                    h_V, h_E, original, encoded, decoded, E_idx = model(X, S, mask, chain_M*chain_M_pos, residue_idx, chain_encoding_all, randn_1, args.show_graphs, args.return_log_probs, SAE_level=args.SAE_level)
-                    mask_for_empty = np.asarray(S[0] != 20)
-                    encoded_ = np.round(encoded.numpy()[0,:,:], decimals=5)[mask_for_empty]
-                    res_df = pd.DataFrame(res_labels, columns = ['identifier'])
-                    encoded_df = pd.DataFrame(encoded_, columns = range(1, 1025))
-                    encoded_df = pd.concat([res_df, encoded_df], axis=1)
-                    write_header = os.path.getsize(csv_output) == 0
-                    encoded_df.to_csv(csv_output, mode='a', header = write_header, index=False)
-                else:
-                    print("Error was had")
-                    print(args.pdb_path)
-            elif args.SAE_level == 'edge' and args.return_log_probs != True:
-                randn_1 = torch.randn(chain_M.shape, device=X.device)
-                h_V, h_E, original, encoded, decoded, E_idx = model(X, S, mask, chain_M*chain_M_pos, residue_idx, chain_encoding_all, randn_1, show_graphs=args.show_graphs, SAE_level=args.SAE_level)
-                name = args.pdb_path[-8:-4]
-                labels = []
-                for i in range(E_idx.shape[1]):
-                    for j in range(E_idx.shape[2]):
-                        labels.append(f'{name}_{E_idx[0,i,0]}-{E_idx[0,i,j]}')
-                encoded = np.reshape(np.round(encoded.numpy()[0, :, :, :], decimals=5), (encoded.shape[1]*encoded.shape[2], encoded.shape[3]))
-                label_df = pd.DataFrame(labels, columns=['identifier'])
-                encoded_df = pd.DataFrame(encoded, columns = range(1, 1025))
-                encoded_df = pd.concat([label_df, encoded_df], axis = 1)
-                mask = pd.DataFrame(np.random.rand(encoded_df.shape[0]) < 1/48) # Only return ~2% of the data to avoid huge files
-                encoded_df = encoded_df[mask[0]]
-                if not os.path.exists(csv_output):
-                    encoded_df.to_csv(csv_output, mode='w', index=False)
-                else:
-                    write_header = os.path.getsize(csv_output) == 0
-                    encoded_df.to_csv(csv_output, mode='a', header = write_header, index=False)
-            elif args.return_log_probs:
-                error, res_labels = create_labels(args.pdb_path, args.SAE_level)
-                if error != True:
-                    randn_1 = torch.randn(chain_M.shape, device=X.device)
-                    log_probs = model(X, S, mask, chain_M*chain_M_pos, residue_idx, chain_encoding_all, randn_1, args.show_graphs, args.return_log_probs, SAE_level=args.SAE_level)
-                    mask_for_empty = np.asarray(S[0] != 20)
-                    log_probs_ = np.round(log_probs.numpy()[0,:,:], decimals=5)[mask_for_empty]
-                    res_df = pd.DataFrame(res_labels, columns = ['identifier'])
-                    log_probs_df = pd.DataFrame(log_probs_, columns = [alphabet[num] for num in range(21)])
-                    log_probs_df = pd.concat([res_df, log_probs_df], axis=1)
-                    write_header = os.path.getsize(csv_output) == 0
-                    log_probs_df.to_csv(csv_output, mode='a', header = write_header, index=False)
-                else:
-                    print("Error was had")
-                    print(args.pdb_path)
-            else: # Collect dense encodings
-                error, res_labels = create_labels(args.pdb_path, args.SAE_level)
-                if error != True:
-                    randn_1 = torch.randn(chain_M.shape, device=X.device)
-                    h_V, h_E, original, encoded, decoded, E_idx = model(X, S, mask, chain_M*chain_M_pos, residue_idx, chain_encoding_all, randn_1, SAE_level=args.SAE_level)
-                    mask_for_empty = np.asarray(S[0] != 20)
-                    encoded_ = np.round(encoded.numpy()[0,:,:], decimals=5)[mask_for_empty]
-                    res_df = pd.DataFrame(res_labels, columns = ['identifier'])
-                    encoded_df = pd.DataFrame(encoded_, columns = range(1, 129))
-                    encoded_df = pd.concat([res_df, encoded_df], axis=1)
-                    write_header = os.path.getsize(csv_output) == 0 
-                    encoded_df.to_csv(csv_output, mode='a', header = write_header, index=False)
-                else:
-                    print("Error was had")
-                    print(args.pdb_path)
-                '''
+                first_deriv = np.gradient(prolineprobs, val_range)
+                if np.max(prolineprobs) - np.min(prolineprobs) > 0.3: #np.max(first_deriv) > 0.05 or np.min(first_deriv) < -0.05: #
+                    plt.scatter(val_range, prolineprobs)
+                    plt.savefig(f'prolineprob_dim{dim}_{aa}.png')
+                    print(aa)
+                    print(np.max(prolineprobs), np.min(prolineprobs))
+                #else:
+                #    print(np.max(prolineprobs), np.min(prolineprobs))
+                
+                #dims 38, 73, 89, 92, 
+            '''
                 mask_for_loss = mask*chain_M*chain_M_pos
                 scores = _scores(S, log_probs, mask_for_loss) #score only the redesigned part
                 native_score = scores.cpu().data.numpy()

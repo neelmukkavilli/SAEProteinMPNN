@@ -49,7 +49,8 @@ def run_distance_collection(pdb_path):
             # Identify k nearest neighbors (including self)
             D_max, _ = torch.max(D, -1, keepdim=True)
             D_adjust = D + (1. - mask_2D) * D_max
-            D_neighbors, E_idx = torch.topk(D_adjust, 48, dim=-1, largest=False)
+
+            D_neighbors, E_idx = torch.topk(D_adjust, top_k, dim=-1, largest=False)
             mask_neighbors = gather_edges(mask_2D.unsqueeze(-1), E_idx)
             return D_neighbors, E_idx, mask_neighbors
 
@@ -89,22 +90,18 @@ def run_distance_collection(pdb_path):
         edge_dist_bins = np.digitize(D_neighbors, distances) -1 
 
         return edge_dist_bins
-    print("distance bins")
+    
     distance_bins = count_distance_bins(D_neighbors)
-    #print(distance_bins)
-    print(distance_bins.shape)
 
     def count_positional_distance(E_idx):
         E_idx = E_idx[0,:,:].numpy()
         edge_pos_dist = np.zeros_like(E_idx, dtype=float)
         for i in range(E_idx.shape[0]):
-            edge_pos_dist[i, :] = abs((E_idx[i, :] - E_idx[i, 0]) / E_idx.shape[0])
+            edge_pos_dist[i, :] = abs((E_idx[i, :] - E_idx[i, 0]))
 
         return edge_pos_dist
-    print("contact order")
+    
     contact_order = count_positional_distance(E_idx)
-    #print(contact_order)
-    print(contact_order.shape)
     def get_res_type(res1, res2):
         polar = ['S', 'T', 'N', 'Q', 'C']
         charge_pos = ['R', 'H', 'K']
@@ -129,11 +126,9 @@ def run_distance_collection(pdb_path):
                 res2 = seq[E_idx[0, i, j]]
                 res_type_arr[i, j] = get_res_type(res1, res2)
         return res_type_arr
-    print("contact type")
+    
     contact_type = res_type_pairs(E_idx, S)
-    #print(contact_type)
-    print(contact_type.shape)
-    mask = np.repeat(S != 20, 48)
+    mask = np.repeat(S != 20, top_k)
     mask = [bool(val) for val in mask]
     df_distance_bins, df_contact_order, df_contact_type = pd.DataFrame(np.reshape(distance_bins, (-1)), columns=['distance_bin']), pd.DataFrame(np.reshape(contact_order, (-1)), columns=['contact_order']), pd.DataFrame(np.reshape(contact_type, (-1)), columns=['contact_type'])
     
@@ -145,13 +140,15 @@ df = pd.DataFrame()
 
 pdb_files = list(input_pdb_dir.glob('*.pdb'))
 pdb_files = [Path(p) for p in natsorted([str(p) for p in pdb_files])]
-pdb_files = pdb_files[:1]  # Limit to first 100 PDB files for testing
+pdb_files = pdb_files  # Limit to first 100 PDB files for testing
+
 for pdb_file in pdb_files:
     print(pdb_file.name)
     data = run_distance_collection(pdb_file)
-    mask = np.random.rand(data.shape[0]) > 0.855
-    #data = data.iloc[mask, :]
+    np.random.seed(0)
+    mask = np.random.rand(data.shape[0]) < 1/48
+    data = data.iloc[mask, :]
     df = pd.concat([df, data], axis=0)
 
-df.to_csv("new_dssp_summary.csv", index=False)
-print(f"✅ DSSP data saved to dssp_summary.csv with {len(df)} rows.")
+df.to_csv("test_edge_features.csv", index=False)
+print(f"✅ Edge data saved to edge_features.csv with {len(df)} rows.")

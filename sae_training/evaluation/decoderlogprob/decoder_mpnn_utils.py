@@ -738,7 +738,7 @@ class SAELayer(nn.Module):
 
         if show_graphs:
         # Original Graph
-            h_V_graph = np.array(X.numpy()[0, :, :])
+            h_V_graph = np.array(X.numpy()[0, :, 10, :])
             print(h_V_graph.shape)
             h_V_graph = normalize(h_V_graph)
             imgO = plt.imshow(h_V_graph)
@@ -748,7 +748,7 @@ class SAELayer(nn.Module):
             plt.show()
 
             # New Graph
-            h_V_original_graph = np.array(decoded.numpy()[0, :, :])
+            h_V_original_graph = np.array(decoded.numpy()[0, :, 10, :])
             h_V_original_graph = normalize(h_V_original_graph)
             #print(h_V_decoded_graph.shape)
             imgD = plt.imshow(h_V_original_graph)
@@ -757,7 +757,7 @@ class SAELayer(nn.Module):
             plt.savefig("decoded.png")
             plt.show()
                 
-            encoded_graph = np.array(encoded.numpy()[0, :, :128])
+            encoded_graph = np.array(encoded.numpy()[0, :, 10, :128])
             encoded_graph = normalize(encoded_graph)
             activation_counts = np.all(encoded_graph==0, axis=0)
             imgE = plt.imshow(encoded_graph,)
@@ -1141,17 +1141,7 @@ class ProteinMPNN(nn.Module):
             for _ in range(num_encoder_layers)
         ])
 
-        self.decoder_layers = nn.ModuleList([
-            DecLayer(hidden_dim, hidden_dim*3, dropout=dropout)
-            for _ in range(num_decoder_layers)
-        ])
-        self.W_out = nn.Linear(hidden_dim, num_letters, bias=True)
-
-        for p in self.parameters():
-            if p.dim() > 1:
-                nn.init.xavier_uniform_(p)
-
-    def forward(self, X, S, mask, chain_M, residue_idx, chain_encoding_all, randn, show_graphs, return_log_probs, use_input_decoding_order=False, decoding_order=None, SAE_level='node'):
+    def forward(self, X, S, mask, chain_M, residue_idx, chain_encoding_all, randn, show_graphs=False, return_log_probs=False, use_input_decoding_order=False, decoding_order=None, SAE_level='node'):
         """ Graph-conditioned sequence model """
         device=X.device
         # Prepare node and edge embeddings
@@ -1180,37 +1170,61 @@ class ProteinMPNN(nn.Module):
         
         if return_log_probs == False:
             return h_V, h_E, self.input_act[2], self.encoded_act[2], self.output_act[2], E_idx
-        else:
-            h_S = self.W_s(S)
-            h_ES = cat_neighbors_nodes(h_S, h_E, E_idx)
+        
+class Decoder(nn.Module):
+    def __init__(self, num_letters=21, node_features=128, edge_features=128,
+        hidden_dim=128, num_encoder_layers=3, num_decoder_layers=3,
+        vocab=21, k_neighbors=64, augment_eps=0.1, dropout=0.1, SAE_level='node', expansion=8):#, ca_only=False):
+        super(Decoder, self).__init__()
 
-            # Build encoder embeddings
-            h_EX_encoder = cat_neighbors_nodes(torch.zeros_like(h_S), h_E, E_idx)
-            h_EXV_encoder = cat_neighbors_nodes(h_V, h_EX_encoder, E_idx)
+        self.node_features = node_features
+        self.edge_features = edge_features
+        self.hidden_dim = hidden_dim
+
+        self.W_s = nn.Embedding(vocab, hidden_dim)
+
+        self.decoder_layers = nn.ModuleList([
+            DecLayer(hidden_dim, hidden_dim*3, dropout=dropout)
+            for _ in range(num_decoder_layers)
+        ])
+        self.W_out = nn.Linear(hidden_dim, num_letters, bias=True)
+
+        for p in self.parameters():
+            if p.dim() > 1:
+                nn.init.xavier_uniform_(p)
+
+    def forward(self, S, mask, chain_M, h_V, h_E, E_idx, randn, use_input_decoding_order=False):
+        device = h_V.device
+        h_S = self.W_s(S)
+        h_ES = cat_neighbors_nodes(h_S, h_E, E_idx)
+
+        # Build encoder embeddings
+        h_EX_encoder = cat_neighbors_nodes(torch.zeros_like(h_S), h_E, E_idx)
+        h_EXV_encoder = cat_neighbors_nodes(h_V, h_EX_encoder, E_idx)
 
 
-            chain_M = chain_M*mask #update chain_M to include missing regions
-            if not use_input_decoding_order:
-                decoding_order = torch.argsort((chain_M+0.0001)*(torch.abs(randn))) #[numbers will be smaller for places where chain_M = 0.0 and higher for places where chain_M = 1.0]
-            mask_size = E_idx.shape[1]
-            permutation_matrix_reverse = torch.nn.functional.one_hot(decoding_order, num_classes=mask_size).float()
-            order_mask_backward = torch.einsum('ij, biq, bjp->bqp',(1-torch.triu(torch.ones(mask_size,mask_size, device=device))), permutation_matrix_reverse, permutation_matrix_reverse)
-            mask_attend = torch.gather(order_mask_backward, 2, E_idx).unsqueeze(-1)
-            mask_1D = mask.view([mask.size(0), mask.size(1), 1, 1])
-            mask_bw = mask_1D * mask_attend
-            mask_fw = mask_1D * (1. - mask_attend)
+        chain_M = chain_M*mask #update chain_M to include missing regions
+        if not use_input_decoding_order:
+            decoding_order = torch.argsort((chain_M+0.0001)*(torch.abs(randn))) #[numbers will be smaller for places where chain_M = 0.0 and higher for places where chain_M = 1.0]
+        mask_size = E_idx.shape[1]
+        permutation_matrix_reverse = torch.nn.functional.one_hot(decoding_order, num_classes=mask_size).float()
+        order_mask_backward = torch.einsum('ij, biq, bjp->bqp',(1-torch.triu(torch.ones(mask_size,mask_size, device=device))), permutation_matrix_reverse, permutation_matrix_reverse)
+        mask_attend = torch.gather(order_mask_backward, 2, E_idx).unsqueeze(-1)
+        mask_1D = mask.view([mask.size(0), mask.size(1), 1, 1])
+        mask_bw = mask_1D * mask_attend
+        mask_fw = mask_1D * (1. - mask_attend)
 
-            h_EXV_encoder_fw = mask_fw * h_EXV_encoder
-            for layer in self.decoder_layers:
-                # Masked positions attend to encoder information, unmasked see. 
-                h_ESV = cat_neighbors_nodes(h_V, h_ES, E_idx)
-                h_ESV = mask_bw * h_ESV + h_EXV_encoder_fw
-                h_V = layer(h_V, h_ESV, mask)
+        h_EXV_encoder_fw = mask_fw * h_EXV_encoder
 
-            logits = self.W_out(h_V)
-            log_probs = F.log_softmax(logits, dim=-1)
-            return log_probs
+        for layer in self.decoder_layers:
+            # Masked positions attend to encoder information, unmasked see. 
+            h_ESV = cat_neighbors_nodes(h_V, h_ES, E_idx)
+            h_ESV = mask_bw * h_ESV + h_EXV_encoder_fw
+            h_V = layer(h_V, h_ESV, mask)
 
+        logits = self.W_out(h_V)
+        log_probs = F.log_softmax(logits, dim=-1)
+        return log_probs
 
 model = ProteinMPNN(node_features=128, 
                         edge_features=128, 
@@ -1222,6 +1236,15 @@ model = ProteinMPNN(node_features=128,
                         augment_eps=0.1,
                         SAE_level='node')
 
+dec_model = Decoder(node_features=128, 
+                        edge_features=128, 
+                        hidden_dim=128, 
+                        num_encoder_layers=3, 
+                        num_decoder_layers=3, 
+                        k_neighbors=32, 
+                        dropout=0.1, 
+                        augment_eps=0.1,
+                        SAE_level='node')
 '''
     def sample(self, X, randn, S_true, chain_mask, chain_encoding_all, residue_idx, mask=None, temperature=1.0, omit_AAs_np=None, bias_AAs_np=None, chain_M_pos=None, omit_AA_mask=None, pssm_coef=None, pssm_bias=None, pssm_multi=None, pssm_log_odds_flag=None, pssm_log_odds_mask=None, pssm_bias_flag=None, bias_by_res=None):
         device = X.device

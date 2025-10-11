@@ -5,7 +5,8 @@ import os
 csv = str(os.getenv("CSV"))
 if csv == 'None':
     csv = 'dense'
-    
+
+csv = "firstedgemodel"    
 csv_input = 'encodings/output_encodings_' + csv + '.csv'
 csv_output = 'encodings/normalized_encodings_' + csv + '.csv'
 
