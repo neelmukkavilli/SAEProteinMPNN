@@ -182,7 +182,7 @@ def main(args):
                 train_mse_loss += torch.sum(mse_loss * mask_for_loss).cpu().data.numpy()
                 
                 # Specificity is the average % of samples a neuron will activate for (# of samples > 0 / # of samples)
-                specificity += (torch.mean((model.encoded_act[2] > 0).cpu()) / len(loader_train)).cpu().data.numpy()
+                specificity += (torch.mean((model.encoded_act[2] > 0).float()) / len(loader_train)).cpu().data.numpy()
                 
                 # Ensure gradient descent doesn't change dictionary vector length
                 remove_parallel_grads(model.sae_layers)
