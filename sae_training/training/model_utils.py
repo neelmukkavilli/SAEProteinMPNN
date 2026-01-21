@@ -324,13 +324,13 @@ def reset_optimizer(optimizer, dead_neurons, device):
             param_state['exp_avg'][:, dead_neurons] = 0
             param_state['exp_avg_sq'][:, dead_neurons] = 0
 
-def reinit_classic(model, optimizer, dead_neurons, device, fraction_reinit=1):
+def reinit_classic(model, layer, optimizer, dead_neurons, device, fraction_reinit=1):
     num_to_reinit = max(1, int(fraction_reinit * len(dead_neurons)))
 
     indices = dead_neurons[torch.randperm(len(dead_neurons))[:num_to_reinit]]
 
-    WS1 = model.sae_layers[2].WS1
-    WS2 = model.sae_layers[2].WS2
+    WS1 = model.sae_layers[layer].WS1
+    WS2 = model.sae_layers[layer].WS2
     idx = indices.to(WS1.weight.device)
 
     # 1. Generate full random weight tensors (same shape)
@@ -676,7 +676,7 @@ class ProteinMPNN(nn.Module):
         """ Graph-conditioned sequence model """
         device=X.device
         # Prepare node and edge embeddings
-        with torch.no_grad():
+        if True:
             E, E_idx = self.features(X, mask, residue_idx, chain_encoding_all)
             h_V = torch.zeros((E.shape[0], E.shape[1], E.shape[-1]), device=E.device)
             h_E = self.W_e(E)
@@ -701,14 +701,24 @@ class ProteinMPNN(nn.Module):
             self.encoded_act.append(encoded)
             self.output_act.append(decoded)
 
+        #encoded, decoded = self.sae_layers[2](h_V)
+
+        
         if reinsert_SAE == True:
             if SAE_level == 'node':
                 h_V = self.output_act[2]
             elif SAE_level == 'edge':
                 h_E = self.output_act[2]
-
-        with torch.no_grad(): # Don't collect gradients for decoder
+    
+        
+        if True: # Don't collect gradients for decoder
             # Concatenate sequence embeddings for autoregressive decoder
+            '''
+            print(encoded.is_leaf)
+            print(encoded.requires_grad)
+            
+            h_V = decoded
+            '''
             h_S = self.W_s(S)
             h_ES = cat_neighbors_nodes(h_S, h_E, E_idx)
 
@@ -735,8 +745,34 @@ class ProteinMPNN(nn.Module):
             logits = self.W_out(h_V)
             log_probs = F.log_softmax(logits, dim=-1)
 
+            '''
+            grad_avgs = torch.zeros_like(encoded)
+            grad_avgs = np.round(grad_avgs.cpu().data.numpy(), 3)
+            mask_for_loss = (mask * chain_M)
+            for r in range(log_probs.shape[1]):
+                S = S.clone()
+                S[:, r] = 0
+                loss, loss_av, true_false = loss_nll(S, log_probs, mask_for_loss)
+                encoded.retain_grad()
+                loss_av.backward(retain_graph=True)
+                grad_avgs = np.round(grad_avgs, 3)
+                grad_avgs = grad_avgs + (np.round(encoded.grad.cpu().data.numpy(), 3) / (log_probs.shape[1]*log_probs.shape[0]))
+                encoded.grad = None
+            print(grad_avgs)
+            '''
         return log_probs, self.input_act[2], self.encoded_act[2], self.output_act[2]#original, encoded, decoded
         
+def sae_grad_calc(log_probs, S, encoded, mask, chain_M):
+    mask_for_loss = (mask * chain_M)
+    grad_avgs = torch.zeros_like(encoded)
+    for r in range(log_probs.shape[1]):
+        S[:, r] = 0
+        loss, loss_av, true_false = loss_nll(S, log_probs, mask_for_loss)
+        encoded.retain_grad()
+        loss.backward
+        grad_avgs += (encoded.grad / (log_probs.shape[1]*log_probs.shape[0]))
+    grad_avgs = round(grad_avgs.data.numpy(), 3)
+
 class NoamOpt:
     "Optim wrapper that implements rate."
     def __init__(self, model_size, factor, warmup, optimizer, step):

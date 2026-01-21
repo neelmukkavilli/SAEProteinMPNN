@@ -1,5 +1,5 @@
 #!/bin/bash
-path_to_PDB="../inputs/1a7w.pdb"
+path_to_PDB="../inputs/1cew.pdb"
 
 output_dir="outputs/training_test_output"
 if [ ! -d $output_dir ]
@@ -21,3 +21,5 @@ python decoder_mpnn_eval.py \
         --sampling_temp "0.1" \
         --seed 37 \
         --batch_size 1
+
+#largeruns/reinit_class/llb1"

@@ -6,9 +6,9 @@ csv = str(os.getenv("CSV"))
 if csv == 'None':
     csv = 'dense'
 
-csv = "firstedgemodel"    
-csv_input = 'encodings/output_encodings_' + csv + '.csv'
-csv_output = 'encodings/normalized_encodings_' + csv + '.csv'
+#csv = "llb1_classic"    
+csv_input = 'encodings/output_' + csv + '.csv'
+csv_output = 'encodings/normalized_' + csv + '.csv'
 
 def normalize(arr):
     arr[arr < 0] = 0

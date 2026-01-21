@@ -4,7 +4,7 @@
 #SBATCH --gres=gpu:rtx2080:1
 #SBATCH -c 3
 #SBATCH --output=example_3_model_w_test.out
-path_to_PDB="inputs/1a7w.pdb"
+path_to_PDB="inputs/1b0x.pdb"
 
 output_dir="outputs/training_test_output"
 if [ ! -d $output_dir ]
@@ -15,8 +15,8 @@ fi
 chains_to_design=""
 
 python protein_mpnn_eval.py \
-        --path_to_model_weights "../training/exp_020/model_weights/largeruns/llb1e-1_new" \
-        --model_name "epoch_last" \
+        --path_to_model_weights "../training/exp_020/model_weights/largeruns/reinit_class/llb1e-1" \
+        --model_name "epoch10" \
         --SAE_level "node" \
         --show_graphs \
         --pdb_path $path_to_PDB \

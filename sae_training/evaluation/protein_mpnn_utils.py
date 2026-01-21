@@ -719,7 +719,32 @@ class EncLayer(nn.Module):
         h_EV = torch.cat([h_V_expand, h_EV], -1)
         h_message = self.W13(self.act(self.W12(self.act(self.W11(h_EV)))))
         h_E = self.norm3(h_E + self.dropout3(h_message))
-              
+
+        '''
+        h_V_graph = np.array(h_V.numpy()[0, :50, :100])
+        h_V_graph = normalize(h_V_graph)
+        plt.figure()
+        img0 = plt.imshow(h_V_graph)
+        plt.colorbar(img0, shrink=0.6)
+        plt.xlabel("Dimension")
+        plt.ylabel("Residue")
+        plt.title("Node Latent Space")
+        plt.savefig("node latent space")
+        plt.show()
+        plt.clf()
+
+        h_E_graph = np.rot90(np.array(h_E.numpy()[0, :100, :, 10]))
+        h_E_graph = normalize(h_E_graph)
+        plt.figure()
+        img0 = plt.imshow(h_E_graph)
+        plt.colorbar(img0, shrink=0.6)
+        plt.xlabel("Residue")
+        plt.ylabel("Neighbor")
+        plt.title("Edge Latent Space")
+        plt.savefig("edge latent space")
+        plt.show()
+        plt.clf() 
+        '''
         return h_V, h_E#, original, encoded              
 
 class SAELayer(nn.Module):
@@ -738,30 +763,64 @@ class SAELayer(nn.Module):
 
         if show_graphs:
         # Original Graph
+            '''
+            x= self.WS1.bias.data
+            y = self.WS2.bias.data
+            bins = np.linspace(-0.1, 0.1, 25)
+            plt.hist(x, bins, alpha=0.5, label='Encoder', density=True)
+            plt.hist(y, bins, alpha=0.5, label='Decoder', density=True)
+            plt.legend(loc='upper right')
+            plt.xlabel("Value")
+            plt.ylabel("Frequency")
+            plt.title("Bias Parameters")
+            plt.savefig("biases.png")
+            plt.show()
+            plt.clf()
+            '''
+
             h_V_graph = np.array(X.numpy()[0, :, :])
-            print(h_V_graph.shape)
             h_V_graph = normalize(h_V_graph)
-            imgO = plt.imshow(h_V_graph)
-            #plt.colorbar(imgO)
-            plt.title("original")
+            plt.figure()
+            img0 = plt.imshow(h_V_graph)
+            plt.colorbar(img0, shrink=0.6)
+            plt.xlabel("Dimension")
+            plt.ylabel("Residue")
+            #plt.hist(h_V_graph.flatten(), bins=50, density=True)
+            #plt.yscale('log')
+            #plt.xlabel("Bias Value")
+            #plt.ylabel("Frequency")
+            plt.title("Original Latent Space")
             plt.savefig("original.png")
             plt.show()
 
             # New Graph
-            h_V_original_graph = np.array(decoded.numpy()[0, :, :])
-            h_V_original_graph = normalize(h_V_original_graph)
-            #print(h_V_decoded_graph.shape)
-            imgD = plt.imshow(h_V_original_graph)
-            #plt.colorbar(imgD)
-            plt.title("decoded")
+            decoded_graph = np.array(decoded.numpy()[0, :, :])
+            decoded_graph = normalize(decoded_graph)
+            plt.figure()
+            imgD = plt.imshow(decoded_graph)
+            plt.colorbar(imgD, shrink=0.6)
+            plt.xlabel("Dimension")
+            plt.ylabel("Residue")
+            #plt.hist(decoded_graph.flatten(), bins=50, density=True)
+            #plt.yscale('log')
+            #plt.xlabel("Bias Value")
+            #plt.ylabel("Frequency")
+            plt.title("Decoded Latent Space")
             plt.savefig("decoded.png")
             plt.show()
-                
+
             encoded_graph = np.array(encoded.numpy()[0, :, :128])
             encoded_graph = normalize(encoded_graph)
-            activation_counts = np.all(encoded_graph==0, axis=0)
-            imgE = plt.imshow(encoded_graph,)
-            plt.title("encoded")
+            plt.figure()
+            imgE = plt.imshow(encoded_graph)
+            plt.colorbar(imgE, shrink=0.6)
+            plt.xlabel("Dimension")
+            plt.ylabel("Residue")
+            #plt.hist(encoded_graph.flatten(), bins=50, density=True)
+            #plt.yscale('log')
+            #plt.xlabel("Activation Level")
+            #plt.ylabel("Frequency")
+            plt.title("Sparse Latent Space")
             plt.savefig("encoded.png")
             plt.show()
 
@@ -1188,7 +1247,6 @@ class ProteinMPNN(nn.Module):
             h_EX_encoder = cat_neighbors_nodes(torch.zeros_like(h_S), h_E, E_idx)
             h_EXV_encoder = cat_neighbors_nodes(h_V, h_EX_encoder, E_idx)
 
-
             chain_M = chain_M*mask #update chain_M to include missing regions
             if not use_input_decoding_order:
                 decoding_order = torch.argsort((chain_M+0.0001)*(torch.abs(randn))) #[numbers will be smaller for places where chain_M = 0.0 and higher for places where chain_M = 1.0]
@@ -1210,7 +1268,6 @@ class ProteinMPNN(nn.Module):
             logits = self.W_out(h_V)
             log_probs = F.log_softmax(logits, dim=-1)
             return log_probs
-
 
 model = ProteinMPNN(node_features=128, 
                         edge_features=128, 

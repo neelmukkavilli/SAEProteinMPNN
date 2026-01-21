@@ -26,7 +26,7 @@ def main(args):
     import subprocess
     from concurrent.futures import ProcessPoolExecutor    
     from utils import worker_init_fn, get_pdbs, loader_pdb, build_training_clusters, PDB_dataset, StructureDataset, StructureLoader
-    from model_utils import featurize, loss_smoothed, loss_nll, SAE_loss, get_std_opt, ProteinMPNN, store_inputs_and_losses, reinit_anthropic, remove_parallel_grads, per_sample_SAE_loss, reinit_classic
+    from model_utils import featurize, loss_smoothed, loss_nll, SAE_loss, get_std_opt, ProteinMPNN, store_inputs_and_losses, reinit_anthropic, remove_parallel_grads, per_sample_SAE_loss, reinit_classic, sae_grad_calc
 
     sparse_weight, mse_weight, reinit_every_n_steps = args.sparse_weight, args.mse_weight, args.reinit_every_n_steps
     
@@ -79,8 +79,8 @@ def main(args):
     train, valid, test = build_training_clusters(params, args.debug)
     train_set = PDB_dataset(list(train.keys()), loader_pdb, train, params)
     train_loader = torch.utils.data.DataLoader(train_set, worker_init_fn=worker_init_fn, **LOAD_PARAM)
-    #valid_set = PDB_dataset(list(valid.keys()), loader_pdb, valid, params)
-    #valid_loader = torch.utils.data.DataLoader(valid_set, worker_init_fn=worker_init_fn, **LOAD_PARAM)
+    valid_set = PDB_dataset(list(valid.keys()), loader_pdb, valid, params)
+    valid_loader = torch.utils.data.DataLoader(valid_set, worker_init_fn=worker_init_fn, **LOAD_PARAM)
 
     model = ProteinMPNN(node_features=args.hidden_dim, 
                         edge_features=args.hidden_dim, 
@@ -106,10 +106,23 @@ def main(args):
         total_step = 0
         reinit_steps = 0
         epoch = 0
-        activity_mask = torch.tensor(np.zeros((1024)))
+        activity_mask = torch.tensor(np.zeros((3, 1024)))
         reservoir_inputs = []
         reservoir_losses = []
-
+    '''
+    check1path = "./exp_020/model_weights/lsample_e250_s500_2/epoch_last.pt"
+    checkpoint1 = torch.load(check1path, map_location=device, weights_only=False)
+    desired_keys = ['encoder_layers.0.WS1.weight', 'encoder_layers.0.WS1.bias', 'encoder_layers.0.WS2.weight', 'encoder_layers.0.WS2.bias',
+    'encoder_layers.1.WS1.weight', 'encoder_layers.1.WS1.bias', 'encoder_layers.1.WS2.weight', 'encoder_layers.1.WS2.bias',
+    'encoder_layers.2.WS1.weight', 'encoder_layers.2.WS1.bias', 'encoder_layers.2.WS2.weight', 'encoder_layers.2.WS2.bias']
+    filtered_state_dict = {}
+    for k, v in checkpoint1['model_state_dict'].items():
+        if k in desired_keys:
+            k = k[15:]
+            filtered_state_dict[k] = v
+    
+    model.sae_layers.load_state_dict(filtered_state_dict)
+    '''
     optimizer = torch.optim.Adam([
         {"params": [param for name, param in model.sae_layers.named_parameters() if "0.W" in name]},
         {"params": [param for name, param in model.sae_layers.named_parameters() if "1.W" in name]},
@@ -120,15 +133,14 @@ def main(args):
     if True:
         print("Parsing proteins")
         train_pdbs_gen = get_pdbs(train_loader, max_length=args.max_protein_length)
+        valid_pdbs_gen = get_pdbs(valid_loader, max_length=args.max_protein_length)
         print("Slicing dataset")
         dataset_train = StructureDataset(islice(train_pdbs_gen, args.num_examples_per_epoch), truncate=args.num_examples_per_epoch, max_length=args.max_protein_length)
+        dataset_valid = StructureDataset(islice(valid_pdbs_gen, 1000), truncate=1000, max_length=args.max_protein_length) # args.num_examples_per_epoch -> 1000 
         print("Cutting into batches")
         loader_train = StructureLoader(dataset_train, batch_size=args.batch_size)
-        '''
-        valid_pdbs_gen = get_pdbs(valid_loader, max_length=args.max_protein_length)
-        dataset_valid = StructureDataset(islice(valid_pdbs_gen, 1000), truncate=1000, max_length=args.max_protein_length) # args.num_examples_per_epoch -> 1000 
         loader_valid = StructureLoader(dataset_valid, batch_size=args.batch_size)
-        '''
+        
         reload_c = 0
         print("Starting training...")
         for e in range(args.num_epochs):
@@ -137,17 +149,16 @@ def main(args):
             model.eval() # Now whole model is trained with model.eval()
             train_sum, train_weights = 0., 0.
             train_acc = 0.
-            epoch_activity_mask = torch.tensor(np.zeros((1024))) # Which neurons are active in each epoch
+            epoch_activity_mask = torch.tensor(np.zeros((3, 1024))) # Which neurons are active in each epoch
             if e % args.reload_data_every_n_epochs == 0:
                 if reload_c != 0:
                     train_pdbs_gen = get_pdbs(train_loader, max_length=args.max_protein_length)
-                    dataset_train = StructureDataset(islice(train_pdbs_gen, args.num_examples_per_epoch), truncate=args.num_examples_per_epoch, max_length=args.max_protein_length)
-                    loader_train = StructureLoader(dataset_train, batch_size=args.batch_size)
-                    '''
-                    dataset_valid = StructureDataset(islice(valid_pdbs_gen, args.num_examples_per_epoch), truncate=args.num_examples_per_epoch, max_length=args.max_protein_length)
                     valid_pdbs_gen = get_pdbs(valid_loader, max_length=args.max_protein_length)
+                    dataset_train = StructureDataset(islice(train_pdbs_gen, args.num_examples_per_epoch), truncate=args.num_examples_per_epoch, max_length=args.max_protein_length)
+                    dataset_valid = StructureDataset(islice(valid_pdbs_gen, args.num_examples_per_epoch), truncate=args.num_examples_per_epoch, max_length=args.max_protein_length)
+                    loader_train = StructureLoader(dataset_train, batch_size=args.batch_size)
                     loader_valid = StructureLoader(dataset_valid, batch_size=args.batch_size)
-                    '''
+                    
                 reload_c += 1
             # Used to collect info for reinitialization
             if args.SAE_level == 'edge':
@@ -155,8 +166,7 @@ def main(args):
             else:
                 reservoir_size = args.reservoir_size
             
-            train_sparse_loss, train_mse_loss, specificity = 0, 0 ,0
-            
+            train_sparse_loss, train_mse_loss, train_specificity = 0, 0 ,0
             for batch_idx, batch in enumerate(loader_train):
                 count = 0
                 start_batch = time.time()
@@ -169,23 +179,26 @@ def main(args):
                 log_probs, original, encoded, decoded = model(X, S, mask, chain_M, residue_idx, chain_encoding_all, args.SAE_level, args.reinsert_SAE)
                 
                 # Find active neurons
-                if args.SAE_level == 'edge':
-                    fired = (model.encoded_act[2].abs().sum(dim=[0,1,2]) > 0).int().cpu() # Sum batches, samples, and neighbors -> [1024]
-                else:
-                    fired = (model.encoded_act[2].abs().sum(dim=[0,1]) > 0).int().cpu() # Sum batches and samples -> [1024]
-                activity_mask += fired.float()
-                epoch_activity_mask += fired.float()
+                fired = torch.tensor(np.zeros((3, 1024)))
+                for i in range(3):
+                    if args.SAE_level == 'edge':
+                        fired[i, :] = (model.encoded_act[i].abs().sum(dim=[0,1,2]) > 0).int().cpu() # Sum batches, samples, and neighbors -> [1024]
+                    else:
+                        fired[i, :] = (model.encoded_act[i].abs().sum(dim=[0,1]) > 0).int().cpu() # Sum batches and samples -> [1024]
+                    
+                activity_mask += fired
+                epoch_activity_mask += fired
                 
                 total_loss, sparse_loss, mse_loss = SAE_loss(model, args.sparse_weight, mask_for_loss.bool())
                 total_loss.backward()
-                train_sparse_loss += torch.sum(sparse_loss * mask_for_loss).cpu().data.numpy()
-                train_mse_loss += torch.sum(mse_loss * mask_for_loss).cpu().data.numpy()
+                train_sparse_loss += (torch.sum(sparse_loss * mask_for_loss).cpu().data.numpy() / len(loader_train))
+                train_mse_loss += (torch.sum(mse_loss * mask_for_loss).cpu().data.numpy() / len(loader_train))
                 
                 # Specificity is the average % of samples a neuron will activate for (# of samples > 0 / # of samples)
-                specificity += (torch.mean((model.encoded_act[2] > 0).float()) / len(loader_train)).cpu().data.numpy()
-                
+                train_specificity += (torch.mean((model.encoded_act[2] > 0).float()) / len(loader_train)).cpu().data.numpy()
                 # Ensure gradient descent doesn't change dictionary vector length
-                remove_parallel_grads(model.sae_layers)
+                with torch.no_grad():
+                    remove_parallel_grads(model.sae_layers)
                 
                 optimizer.step()
 
@@ -216,40 +229,41 @@ def main(args):
                             count = 0
                     elif args.reinit == "classic": # Reinitialize random fraction of dead neurons to kaiming_uniform_
                         with torch.no_grad():
-                            dead_neurons = (activity_mask == 0).nonzero(as_tuple=True)[0]
-                            alive_neurons = (activity_mask > 0).nonzero(as_tuple=True)[0]
-                            if len(dead_neurons) > 0:
-                                print(f'L2 norm before reinitialization {torch.linalg.vector_norm(model.sae_layers[2].WS1.weight[dead_neurons], dim=1).mean().item()}')
-                                reinit_classic(model, optimizer, dead_neurons, device, fraction_reinit=1)
-                                print(f'L2 norm before reinitialization {torch.linalg.vector_norm(model.sae_layers[2].WS1.weight[dead_neurons], dim=1).mean().item()}')
-                            else:
-                                print("No dead neurons, not reinitializing")
+                            for i in range(3):
+                                dead_neurons = (activity_mask[i, :] == 0).nonzero(as_tuple=True)[0]
+                                alive_neurons = (activity_mask[i, :] > 0).nonzero(as_tuple=True)[0]
+                                if len(dead_neurons) > 0:
+                                    print(f'L2 norm before reinitialization {torch.linalg.vector_norm(model.sae_layers[i].WS1.weight[dead_neurons], dim=1).mean().item()}')
+                                    reinit_classic(model, i, optimizer, dead_neurons, device, fraction_reinit=0.2)
+                                    print(f'L2 norm before reinitialization {torch.linalg.vector_norm(model.sae_layers[i].WS1.weight[dead_neurons], dim=1).mean().item()}')
+                                else:
+                                    print("No dead neurons, not reinitializing")
                             activity_mask.zero_()
                             reservoir_losses = []
                             reservoir_inputs = []
                             reinit_steps = 0
                             count = 0
-            '''
-                # Calculate training loss
-                loss, loss_av, true_false = loss_nll(S, log_probs, mask_for_loss)
-                train_sum += torch.sum(loss * mask_for_loss).cpu().data.numpy()
-                train_acc += torch.sum(true_false * mask_for_loss).cpu().data.numpy()
-                train_weights += torch.sum(mask_for_loss).cpu().data.numpy()
-
             
+                # Calculate training loss
+                #loss, loss_av, true_false = loss_nll(S, log_probs, mask_for_loss)
+                #train_sum += torch.sum(loss * mask_for_loss).cpu().data.numpy()
+                #train_acc += torch.sum(true_false * mask_for_loss).cpu().data.numpy()
+                #train_weights += torch.sum(mask_for_loss).cpu().data.numpy()
+
             model.eval()
             print("Reinit steps:", reinit_steps)
             with torch.no_grad():
-                validation_sum, validation_weights, validation_sparse_loss, validation_mse_loss, validation_norm_loss = 0., 0., 0., 0., 0.
+                validation_sum, validation_weights, valid_sparse_loss, valid_mse_loss, validation_norm_loss = 0., 0., 0., 0., 0.
                 validation_acc = 0.
-                specificity = 0
+                valid_specificity = [0,0,0]
                 for batch_idx, batch in enumerate(loader_valid):
                     X, S, mask, lengths, chain_M, residue_idx, mask_self, chain_encoding_all = featurize(batch, device)
                     log_probs, original, encoded, decoded = model(X, S, mask, chain_M, residue_idx, chain_encoding_all, args.SAE_level, args.reinsert_SAE)
                     
                     # specificity is the average % of samples a neuron will activate for (# of samples > 0 / # of samples)
-                    specificity += torch.mean((model.encoded_act[2] > 0).float()) / len(loader_valid)
-                    
+                    for i in range(3):
+                        valid_specificity[i] += (torch.mean((model.encoded_act[i] > 0).float()) / len(loader_valid)).cpu().data.numpy()
+
                     mask_for_loss = mask*chain_M
                     loss, loss_av, true_false = loss_nll(S, log_probs, mask_for_loss)
                     total_loss, sparse_loss, mse_loss = SAE_loss(model, sparse_weight, mask_for_loss.bool())
@@ -257,39 +271,46 @@ def main(args):
                     validation_sum += torch.sum(loss * mask_for_loss).cpu().data.numpy()
                     validation_acc += torch.sum(true_false * mask_for_loss).cpu().data.numpy()
                     validation_weights += torch.sum(mask_for_loss).cpu().data.numpy()
-                    validation_sparse_loss += torch.sum(sparse_loss * mask_for_loss).cpu().data.numpy()
-                    validation_mse_loss += torch.sum(mse_loss * mask_for_loss).cpu().data.numpy()
+                    valid_sparse_loss += (torch.sum(sparse_loss * mask_for_loss).cpu().data.numpy() / len(loader_valid))
+                    valid_mse_loss += (torch.sum(mse_loss * mask_for_loss).cpu().data.numpy() / len(loader_valid))
                     #validation_norm_loss += torch.sum(loss_av_smoothed * mask_for_loss).cpu().data.numpy()
             
+                '''
+                train_loss = train_sum / train_weights
+                train_accuracy = train_acc / train_weights
+                train_perplexity = np.exp(train_loss)
+                validation_loss = validation_sum / validation_weights
+                validation_accuracy = validation_acc / validation_weights
+                validation_perplexity = np.exp(validation_loss)
 
-            train_loss = train_sum / train_weights
-            train_accuracy = train_acc / train_weights
-            train_perplexity = np.exp(train_loss)
-            validation_loss = validation_sum / validation_weights
-            validation_accuracy = validation_acc / validation_weights
-            validation_perplexity = np.exp(validation_loss)
+                train_perplexity_ = np.format_float_positional(np.float32(train_perplexity), unique=False, precision=3)     
+                validation_perplexity_ = np.format_float_positional(np.float32(validation_perplexity), unique=False, precision=3)
+                train_accuracy_ = np.format_float_positional(np.float32(train_accuracy), unique=False, precision=3)
+                validation_accuracy_ = np.format_float_positional(np.float32(validation_accuracy), unique=False, precision=3)
+                epoch_activity_mask.zero_()
+                norm_loss_ = np.format_float_positional(np.float32(validation_norm_loss), unique=False, precision=3)
+                '''
+            print(encoded.is_leaf)
+            with torch.grad():
+                sae_grad_calc(log_probs, S, encoded, mask, chain_M)
 
-            train_perplexity_ = np.format_float_positional(np.float32(train_perplexity), unique=False, precision=3)     
-            validation_perplexity_ = np.format_float_positional(np.float32(validation_perplexity), unique=False, precision=3)
-            train_accuracy_ = np.format_float_positional(np.float32(train_accuracy), unique=False, precision=3)
-            validation_accuracy_ = np.format_float_positional(np.float32(validation_accuracy), unique=False, precision=3)
-            epoch_activity_mask.zero_()
-            norm_loss_ = np.format_float_positional(np.float32(validation_norm_loss), unique=False, precision=3)
-            '''
-
-            specificity_ = np.format_float_positional(np.float32(specificity.item()), unique=False, precision=3)
-            sparse_loss_ = np.format_float_positional(np.float32(train_sparse_loss), unique=False, precision=3)
-            mse_loss_ = np.format_float_positional(np.float32(train_mse_loss), unique=False, precision=3)
-            dead_neurons = len((activity_mask == 0).nonzero(as_tuple=True)[0])
-            per_epoch_dead_neurons = len((epoch_activity_mask == 0).nonzero(as_tuple=True)[0])
+            train_specificity_ = np.format_float_positional(np.float32(train_specificity.item()), unique=False, precision=3)
+            train_sparse_loss_ = np.format_float_positional(np.float32(train_sparse_loss), unique=False, precision=3)
+            train_mse_loss_ = np.format_float_positional(np.float32(train_mse_loss), unique=False, precision=3)
+            valid_specificity_ = [round(np.float32(v.item()), 3) for v in valid_specificity]
+            valid_sparse_loss_ = np.format_float_positional(np.float32(valid_sparse_loss), unique=False, precision=3)
+            valid_mse_loss_ = np.format_float_positional(np.float32(valid_mse_loss), unique=False, precision=3)
+            dead_neurons = [len((activity_mask[i, :] == 0).nonzero(as_tuple=True)[0]) for i in range(3)]
+            per_epoch_dead_neurons = [len((epoch_activity_mask[i, :] == 0).nonzero(as_tuple=True)[0]) for i in range(3)]
 
             t1 = time.time()
             dt = np.format_float_positional(np.float32(t1-t0), unique=False, precision=1) 
             with open(logfile, 'a') as f:
-                f.write(f'epoch: {e+1}, time: {dt}, sparse loss: {sparse_loss_}, mse loss: {mse_loss_}, dead neurons: {dead_neurons}, per epoch dead neurons: {per_epoch_dead_neurons}, specificity: {specificity_}\n')#, valid_acc: {validation_accuracy_}\n')
-            print(f'epoch: {e+1}, time: {dt}, reinit step: {reinit_steps}, sparse loss: {sparse_loss_}, mse loss: {mse_loss_}, dead neurons: {dead_neurons}, per epoch dead neurons: {per_epoch_dead_neurons}, specificity: {specificity_}')#, valid_acc: {validation_accuracy_}')
+                f.write(f'epoch: {e+1}, time: {dt}, train sparse loss: {train_sparse_loss_}, train mse loss: {train_mse_loss_}, train spec: {train_specificity_}, valid sparse loss: {valid_sparse_loss_}, valid mse loss: {valid_mse_loss_}, valid spec: {valid_specificity_}, dead: {dead_neurons}, dead per epoch: {per_epoch_dead_neurons}\n')#, valid_acc: {validation_accuracy_}\n')
+            print(f'epoch: {e+1}, time: {dt}, train sparse loss: {train_sparse_loss_}, train mse loss: {train_mse_loss_}, train spec {train_specificity_}, valid sparse loss: {valid_sparse_loss_}, valid mse loss: {valid_mse_loss_}, valid spec: {valid_specificity_}, dead: {dead_neurons}, dead per epoch: {per_epoch_dead_neurons}')#, valid_acc: {validation_accuracy_}')
             checkpoint_filename_last = base_folder+'model_weights/epoch_last.pt'.format(e+1, total_step)
-            print("Len of res inputs:", len(reservoir_inputs))
+            if args.reinit == 'anthropic':
+                print("Len of res inputs:", len(reservoir_inputs))
             torch.save({
                         'epoch': e+1,
                         'step': total_step,

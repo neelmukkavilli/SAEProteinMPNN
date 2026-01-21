@@ -135,7 +135,6 @@ class StructureDataset():
     def __getitem__(self, idx):
         return self.data[idx]
 
-
 class StructureLoader():
     def __init__(self, dataset, batch_size=100, shuffle=True,
         collate_fn=lambda x:x, drop_last=False):
@@ -168,7 +167,6 @@ class StructureLoader():
         for b_idx in self.clusters:
             batch = [self.dataset[i] for i in b_idx]
             yield batch
-
 
 def worker_init_fn(worker_id):
     np.random.seed()
@@ -214,7 +212,6 @@ def get_std_opt(parameters, d_model, step):
     )
 
 # ChatGPT get_pdbs() function
-
 def get_pdbs(data_loader, max_length=10000):
     init_alphabet = list("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")
     extra_alphabet = [str(item) for item in np.arange(300)]
@@ -291,7 +288,6 @@ def get_pdbs(data_loader, max_length=10000):
 
                 if len(concat_seq) <= max_length:
                     yield my_dict  # key change: yield instead of appending
-
 
 # Original
 def get_pdbs_old(data_loader, repeat=1, max_length=10000, num_units=1000000):
@@ -374,8 +370,6 @@ def get_pdbs_old(data_loader, repeat=1, max_length=10000, num_units=1000000):
                         break
     return pdb_dict_list
 
-
-
 class PDB_dataset(torch.utils.data.Dataset):
     def __init__(self, IDs, loader, train_dict, params):
         self.IDs = IDs
@@ -391,8 +385,6 @@ class PDB_dataset(torch.utils.data.Dataset):
         sel_idx = np.random.randint(0, len(self.train_dict[ID]))
         out = self.loader(self.train_dict[ID][sel_idx], self.params)
         return out
-
-
 
 def loader_pdb(item,params):
 

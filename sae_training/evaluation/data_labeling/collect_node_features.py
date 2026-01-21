@@ -171,10 +171,10 @@ def run_dssp(pdb_path):
             identifier = f"{str(pdb_path)[-8:-4]}{chain}{idx}"
             main_dict[identifier]['residue'] = aa
             main_dict[identifier]['sec_struct'] = ss
-            main_dict[identifier]['ASA'] = asa
+            main_dict[identifier]['ASA'] = round(asa, 3)
             main_dict[identifier]['phi'] = phi
             main_dict[identifier]['psi'] = psi
-        except KeyError:
+        except (TypeError, KeyError):
             continue
 
 input_pdb_dir = Path('/WAVE/bio/ML/SAE_train/SAEProteinMPNN/sae_training/evaluation/inputs')
@@ -220,10 +220,10 @@ def norm_vals(arr):
 
     return normalized_col.round(5)
 
-arr = main_df['ASA']
-norm_arr = norm_vals(arr)
-main_df['ASA'] = norm_arr.values
-print("ASA normalized")
+#arr = main_df['ASA']
+#norm_arr = norm_vals(arr)
+#main_df['ASA'] = arr.values
+#print("ASA normalized")
 
 arr = main_df['phi']
 norm_arr = norm_angles(arr)

@@ -187,6 +187,22 @@ def main(args):
     model.to(device)
     model.load_state_dict(checkpoint['model_state_dict'], strict=False)
     model.eval()
+    check1path = "../../training/exp_020/model_weights/lsample_e250_s500_2/epoch_last.pt"
+    checkpoint1 = torch.load(check1path, map_location=device, weights_only=False)
+    #for k, v in checkpoint['model_state_dict'].items():
+    #    print(k)
+    desired_keys = ['encoder_layers.0.WS1.weight', 'encoder_layers.0.WS1.bias', 'encoder_layers.0.WS2.weight', 'encoder_layers.0.WS2.bias',
+    'encoder_layers.1.WS1.weight', 'encoder_layers.1.WS1.bias', 'encoder_layers.1.WS2.weight', 'encoder_layers.1.WS2.bias',
+    'encoder_layers.2.WS1.weight', 'encoder_layers.2.WS1.bias', 'encoder_layers.2.WS2.weight', 'encoder_layers.2.WS2.bias']
+    #desired_keys = ['sae_layers', 'layer1.bias', 'layer2.weight']
+    filtered_state_dict = {}
+    for k, v in checkpoint1['model_state_dict'].items():
+        if k in desired_keys:
+            k = k[15:]
+            filtered_state_dict[k] = v
+    #filtered_state_dict = {k: v for k, v in checkpoint['model_state_dict'].items() if k in desired_keys}
+    
+    model.sae_layers.load_state_dict(filtered_state_dict)
 
     dec_model = Decoder(num_letters=21,
                         node_features=hidden_dim,
@@ -239,45 +255,370 @@ def main(args):
     csv_output = 'encodings/output_' + args.csv_output + '.csv'
 
     # Validation epoch
-    with torch.no_grad():
+    for i in range(1):
         for ix, protein in enumerate(dataset_valid):
             batch_clones = [copy.deepcopy(protein) for i in range(BATCH_COPIES)]
             X, S, mask, lengths, chain_M, chain_encoding_all, chain_list_list, visible_list_list, masked_list_list, masked_chain_length_list_list, chain_M_pos, omit_AA_mask, residue_idx, dihedral_mask, tied_pos_list_of_lists_list, pssm_coef, pssm_bias, pssm_log_odds_all, bias_by_res_all, tied_beta = tied_featurize(batch_clones, device, chain_id_dict, fixed_positions_dict, omit_AA_dict, tied_positions_dict, pssm_dict, bias_by_res_dict, ca_only=args.ca_only)
             name_ = batch_clones[0]['name']
             randn_1 = torch.randn(chain_M.shape, device=X.device)
             h_V, h_E, original, encoded, decoded, E_idx = model(X, S, mask, chain_M*chain_M_pos, residue_idx, chain_encoding_all, randn_1, SAE_level=args.SAE_level)
-            max_activation = torch.max(h_V) #-1
-            min_activation = torch.min(h_V) #4
+            print(_S_to_seq(S[0]))
+            #min_act = -5
+            #max_act = 5
+            #val_range = np.linspace(min_act, max_act, 10)
+            W2 = (model.sae_layers[2].WS2.weight).T
+            b2 = (model.sae_layers[2].WS2.bias)
+            
+            encoded_new = encoded @ W2 + b2
+            logits, log_probs = dec_model(S, mask, chain_M*chain_M_pos, encoded_new, h_E, E_idx, randn_1, use_input_decoding_order=False)
+            mask_for_loss = mask*chain_M
+            #loss, loss_av, true_false = loss_nll(S, log_probs, mask_for_loss)
+            #loss.backward()
+            encoded.retain_grad()
+            X.retain_grad()
+            print(log_probs.shape)
+            match_gradient = torch.ones_like(log_probs[:, :, 19])
+            log_probs[:, :, 1].backward(gradient=match_gradient)
+            #torch.autograd.grad(log_probs, encoded_new)
+            print(X.shape)
+            print(np.round(X.grad.data.numpy()[0], 3))
+            #W_pinv = torch.linalg.pinv(W1)
+            #encoded_new.shape = [0, L, 1024]
 
-            #for dim in range(30):
-            #dim = 9
-            #for dim in range(h_V.shape[-1]):
-            dim = 38
-            for aa in range(h_V.shape[-2]):
-                if aa - 10 < 0:
-                    min = 0
-                else:
-                    min = aa - 10
-                val_range = np.linspace(min_activation, max_activation, 50)
-                prolineprobs = []
-                for val in val_range:
+            # Find logit effects with only information of E_idx
+            #h_E.data[:, :, :, :] = 0
+            #E_idx.data[:, :, :] = 0
+            #encoded_new = encoded.clone()
+            #encoded_new.data[:, :, :] = 0
+            #encoded_new = encoded_new @ W2 + b2
+            #encoded_new = encoded_new @ W2 + b2
+            #logits, log_probs = dec_model(S, mask, chain_M*chain_M_pos, encoded_new, h_E, E_idx, randn_1, use_input_decoding_order=False)
+            #top_aa = np.argmax(log_probs.data[0, :, :].numpy(), axis=1)
+            #print(_S_to_seq(top_aa))
+            #e_idx_sums = [round(l.item(), 3) for l in logits[0, 0, :].numpy()]
+            #print(e_idx_sums)
+            #print(np.argmax(e_idx_sums))
+            #print(np.max(e_idx_sums))
+            #print(np.argmin(e_idx_sums))
+            #print(np.min(e_idx_sums))
+            '''
+            total_deriv = {}
+            for l in range(21):
+                total_deriv[l] = []
+            for i in range(1024):
+                #h_E.data[:, :, :, :] = 0
+                #encoded_new = encoded @ W2 + b2
+                encoded_new = encoded.clone()
+                encoded_new.data[:, :, :] = 0
+                encoded_new.data[:, :, i] = 1
+                encoded_new = encoded_new @ W2 + b2
+                #encoded_new.data[:, :, :] = 0
+                #encoded_new.data[:, i, 72] = 1
+                logits, log_probs = dec_model(S, mask, chain_M*chain_M_pos, encoded_new, h_E, E_idx, randn_1, use_input_decoding_order=False)
+                for l in range(21):
+                    total_deriv[l].append(round(logits[0, 0, l].numpy().item() - e_idx_sums[l], 3))
+                #total_deriv.append(round(logits[0, 15, 0].numpy().item(), 3))
+            #print(total_deriv)
+            #print([round(total_deriv[i] - e_idx_sums[i], 3) for i in range(len(e_idx_sums))])
+            print(np.argmax(total_deriv))
+            print(np.max(total_deriv))
+            print(np.argmin(total_deriv))
+            print(np.min(total_deriv))
+
+            plt.subplots()
+            data = []
+            for l in range(21):
+                data.append(total_deriv[l])
+            plt.boxplot(data, label=list('ACDEFGHIKLMNPQRSTVWYX'))
+            #plt.hist(total_deriv, bins=20)
+            plt.show()
+            '''
+
+            '''
+            # 0-indexed: E/H = dim 88,89
+            # philic = dim 181
+            # neg E = dim 374
+            # turn = dim 685
+
+            # 1cew 0-indexed
+            # H: 9-25, 68-77
+            # E: 31-45, 49-63, 83-93, 98-106
+            encoded_new = encoded.clone()
+
+            encoded_new = encoded_new @ W_pinv + b2
+            log_probs = dec_model(S, mask, chain_M*chain_M_pos, encoded_new, h_E, E_idx, randn_1, use_input_decoding_order=False)
+            top_aa = np.argmax(log_probs.data[0, :, :].numpy(), axis=1)
+            print(_S_to_seq(top_aa))
+
+            encoded_new = encoded.clone()
+
+            #encoded_new.data[:, :6, 374] = max_act
+            #encoded_new.data[:, :6, 88] = max_act
+            #encoded_new.data[:, :6, 89] = max_act
+
+                #encoded_new.data[:, :6, 88] = max_act # D5 -> E5 on min, E2 -> A2 / Q4 -> H4, I6 -> V6 on max
+                #encoded_new.data[:, :6, 89] = max_act # E2 -> G2 on min, D5 -> E5 / I6 -> C6 on max
+            #encoded_new.data[:, :6, 685] = max_act # Proline log probs + AUC match (Turn): Q4 -> E4 on max, I6 -> V6 / L8 -> E8 on min ! Ensures P on res 3 to start SS
+                #encoded_new.data[:, :6, 374] = max_act #Proline prob inv: I6 -> V6 on max
+                #encoded_new.data[:, :6, 648] = min_act # H_inv: E2 -> S2 / I6 -> A6 on max
+                #encoded_new.data[:, :6, 637] = max_act # Helix AUC+ validated?: P3->A3 on max
+            #encoded_new.data[:, :6, 51] = max_act # AUC test (Turn): Q4 -> L4 on max
+            #encoded_new.data[:, :6, 210] = max_act # Proline log probs test: Q4 -> L4 on max
+
+
+            # Made a decent helix tail
+            #encoded_new.data[:, :6, 685] = max_act # Proline log probs + AUC match (Turn): Q4 -> E4 on max, I6 -> V6 / L8 -> E8 on min ! Ensures P on res 3 to start SS
+            #encoded_new.data[:, :6, 51] = max_act # AUC test (Turn): Q4 -> L4 on max
+            #encoded_new.data[:, :6, 210] = max_act
+            
+            # Made a very good beta tail
+            #encoded_new.data[:, :6, 88] = max_act # D5 -> E5 on min, E2 -> A2 / Q4 -> H4, I6 -> V6 on max
+            #encoded_new.data[:, :6, 89] = max_act # E2 -> G2 on min, D5 -> E5 / I6 -> C6 on max
+            #encoded_new.data[:, :6, 685] = min_act # Proline log probs + AUC match (Turn): Q4 -> E4 on max, I6 -> V6 / L8 -> E8 on min
+            #encoded_new.data[:, :6, 374] = max_act #Proline prob inv: I6 -> V6 on max
+            #encoded_new.data[:, :6, 648] = max_act # H_inv: E2 -> S2 / I6 -> A6 on max
+            #encoded_new.data[:, :6, 637] = max_act # Helix AUC+ validated?: P3->A3 on max
+            #encoded_new.data[:, :6, 51] = max_act # AUC test (Turn): Q4 -> L4 on max
+            
+            # Import dimensions
+            # [51, 88, 89, 210, 374, 637, 648, 685]
+            encoded_new = encoded_new @ W_pinv + b2
+            log_probs = dec_model(S, mask, chain_M*chain_M_pos, encoded_new, h_E, E_idx, randn_1, use_input_decoding_order=False)
+            top_aa = np.argmax(log_probs.data[0, :, :].numpy(), axis=1)
+            print(_S_to_seq(top_aa))
+            '''
+            '''
+            dim = 254
+            H_probs = []
+            encoded_new = encoded.clone()
+            encoded_new.data[:, :, dim] = max_act
+            encoded_new = encoded_new @ W_pinv + b2
+            log_probs = dec_model(S, mask, chain_M*chain_M_pos, encoded_new, h_E, E_idx, randn_1, use_input_decoding_order=False)
+            H_probs = [np.mean([log_probs.data[:, res, 0], log_probs.data[:, res, 3], log_probs.data[:, res, 9], log_probs.data[:, res, 14], log_probs.data[:, res, 10], log_probs.data[:, res, 8]]) for res in range(encoded.shape[-2])]
+            window_size = 2
+            weights = np.ones(window_size) / window_size
+            H_probs = np.convolve(H_probs, weights, mode='valid')
+            
+            plt.figure()
+            plt.plot(list(range(len(H_probs))), H_probs)
+            plt.savefig("H_probs after injection across prot")
+
+            top_aa = np.argmax(log_probs.data[0, :, :].numpy(), axis=1)
+            print(_S_to_seq(top_aa))
+            '''
+            '''
+            #dim 290 is pretty good
+            #dim 893 look at
+            #dims = 10, 58, 90, 115, 154, 254, 290, 325, 430, 881, 893, 984
+            dim =  984#0-indexed
+            H_probs = []
+            P_probs = []
+            for val in val_range:
+                encoded_new = encoded.clone()
+                encoded_new.data[:, :, dim] = val
+                encoded_new.data[:, :, dim] = val
+                encoded_new = encoded_new @ W_pinv + b2
+                log_probs = dec_model(S, mask, chain_M*chain_M_pos, encoded_new, h_E, E_idx, randn_1, use_input_decoding_order=False)
+                H_prob = np.mean([log_probs.data[:, 9:25, 0].mean() + log_probs.data[:, 9:25, 3].mean(), log_probs.data[:, 9:25, 9].mean(), log_probs.data[:, 9:25, 14].mean(), log_probs.data[:, 9:25, 10].mean(), log_probs.data[:, 9:25, 8].mean()])
+                H_prob += np.mean([log_probs.data[:, 68:77, 0].mean() + log_probs.data[:, 68:77, 3].mean(), log_probs.data[:, 68:77, 9].mean(), log_probs.data[:, 68:77, 14].mean(), log_probs.data[:, 68:77, 10].mean(), log_probs.data[:, 68:77, 8].mean()])
+                H_prob = H_prob / 2
+                H_probs.append(H_prob)
+                P_prob = np.mean([log_probs.data[:, 9:25, 12].mean(), log_probs.data[:, 68:77, 0].mean()])
+                P_probs.append(P_prob)
+            plt.figure()
+            plt.plot(val_range, H_probs, label='h probs')
+            plt.plot(val_range, P_probs, label='p probs')
+            plt.legend()
+            plt.savefig(f"changing vals over dim {dim}")
+            '''
+            '''
+            if True:
+                if True:
+                    # alphabet = 'ACDEFGHIKLMNPQRSTVWYX'
+                    #FYWTVI Log probs (B sheets): 4,19,18,16,17,7
+                    #AELRMK Log probs (A helices): 0,3,9,14,10,8
+                    encoded_new = encoded.clone()
+                    encoded_new.data[:, :, 374] = max_act
+                    encoded_new = encoded_new @ W_pinv + b2
+                    log_probs = dec_model(S, mask, chain_M*chain_M_pos, encoded_new, h_E, E_idx, randn_1, use_input_decoding_order=False)
+                    B_prob_max = (np.exp(log_probs.data[0, :, 4]) + np.exp(log_probs.data[0, :, 19]) + np.exp(log_probs.data[0, :, 18]) + np.exp(log_probs.data[0, :, 16]) + np.exp(log_probs.data[0, :, 17]) + np.exp(log_probs.data[0, :, 7])).numpy()
+
+                    encoded_new = encoded.clone()
+                    encoded_new.data[:, :, 374] = min_act
+                    encoded_new = encoded_new @ W_pinv + b2
+                    log_probs = dec_model(S, mask, chain_M*chain_M_pos, encoded_new, h_E, E_idx, randn_1, use_input_decoding_order=False)
+                    B_prob_min = (np.exp(log_probs.data[0, :, 4]) + np.exp(log_probs.data[0, :, 19]) + np.exp(log_probs.data[0, :, 18]) + np.exp(log_probs.data[0, :, 16]) + np.exp(log_probs.data[0, :, 17]) + np.exp(log_probs.data[0, :, 7])).numpy()
+
+                    encoded_new = encoded.clone()
+                    encoded_new = encoded_new @ W_pinv + b2
+                    log_probs = dec_model(S, mask, chain_M*chain_M_pos, encoded_new, h_E, E_idx, randn_1, use_input_decoding_order=False)
+                    B_prob_none = (np.exp(log_probs.data[0, :, 4]) + np.exp(log_probs.data[0, :, 19]) + np.exp(log_probs.data[0, :, 18]) + np.exp(log_probs.data[0, :, 16]) + np.exp(log_probs.data[0, :, 17]) + np.exp(log_probs.data[0, :, 7])).numpy()
+
+                    window_size = 5
+                    weights = np.ones(window_size) / window_size
+                    print(B_prob_max)
+                    data = [np.convolve(B_prob_max, weights, mode='valid'), np.convolve(B_prob_min, weights, mode='valid'), np.convolve(B_prob_none, weights, mode='valid')]
+
+                    x_vals = list(range(len(data[0])))
+                    plt.figure()
+                    plt.plot(x_vals, data[0], label=f'Max Activation')
+                    plt.plot(x_vals, data[1], label=f'Min Activation')
+                    plt.plot(x_vals, data[2], label=f'No Change')
+                    plt.legend()
+                    plt.xlabel("Residue")
+                    plt.ylabel("Chance of Beta Sheet Residue")
+                    plt.title("Residue Probabilites by Altering Dimension 374")
+                    plt.show()
+                    plt.savefig("Residue prob changes")
+            '''
+
+            '''
+
+                if np.max(probs) - np.min(probs) > 0.5:
+                    print(dim, np.max(probs), np.min(probs))
+                if dim % 20 == 0:
+                    print(dim)
+            '''    
+            '''
+            window_size = 5
+
+            # Create a window of ones
+            weights = np.ones(window_size) / window_size
+
+            dims = [920, 849, 406]
+
+            lines = [np.convolve(encoded.numpy()[0, :, dims[0]-1], weights, mode='valid'), np.convolve(encoded.numpy()[0, :, dims[1]-1], weights, mode='valid'), np.convolve(encoded.numpy()[0, :, dims[2]-1], weights, mode='valid')]
+            x = list(range(1, encoded.shape[-2]-3))
+            plt.figure()
+            plt.plot(x, lines[0], label=f'Dim {dims[0]}')
+            plt.plot(x, lines[1], label=f'Dim {dims[1]}')
+            plt.plot(x, lines[2], label=f'Dim {dims[2]}')
+            plt.title("Activations across Protein")
+            plt.ylabel("Normalized Activation")
+            plt.xlabel("Residue Number")
+            plt.legend()
+            plt.plot()
+            plt.savefig("Beta sheet pos activations")
+            
+            
+            min_activation = 4#torch.max(encoded) #-1
+            max_activation = -2#torch.min(encoded) #4
+            #plt.figure()
+            #val_range = np.linspace(min_activation, max_activation, 3)
+            #for dim in range(encoded.shape[-1]):
+            #lines = {}
+            #alphabet = 'AIKLM'
+            #for aa in list(alphabet):
+            #    lines[aa] = []
+            #dim = 972-1    
+            #for aa in range(h_V.shape[-2]):
+            #    if aa - 10 < 0:
+            #        min = 0
+            #    else:
+            #        min = aa - 10
+            if True:
+                #prolineprobs = []
+                #aaprobs = {}
+                #for aa in list(alphabet[:-1]):
+                #    aaprobs[aa] = []
+                #lines[aa] = []
+                #for val in val_range:
+                if True:
                     # I needed to change this to be making a copy of h-V
-                    h_V_new = h_V.clone()
-                    h_V_new.data[:, min:aa, dim] = val
-                    log_probs = dec_model(S, mask, chain_M*chain_M_pos, h_V_new, h_E, E_idx, randn_1, use_input_decoding_order=False)
-                    P_prob = log_probs.data[:, min:aa, 12].mean() # Proline
-                    prolineprobs.append(P_prob)
+                    # 0-indexed: E/H = dim 88,89
+                    # philic = dim 181
+                    # neg E = dim 374
+                    # turn = dim 685
 
-                first_deriv = np.gradient(prolineprobs, val_range)
-                if np.max(prolineprobs) - np.min(prolineprobs) > 0.3: #np.max(first_deriv) > 0.05 or np.min(first_deriv) < -0.05: #
-                    plt.scatter(val_range, prolineprobs)
-                    plt.savefig(f'prolineprob_dim{dim}_{aa}.png')
-                    print(aa)
-                    print(np.max(prolineprobs), np.min(prolineprobs))
+                    # 1cew 0-indexed
+                    # H: 9-25, 68-77
+                    # E: 31-45, 49-63, 83-93, 98-106
+                    encoded_new = encoded.clone()
+                    
+                    encoded_new.data[:, 9:25, 88] = max_activation
+                    encoded_new.data[:, 9:25, 89] = max_activation
+                    encoded_new.data[:, 68:77, 88] = max_activation
+                    encoded_new.data[:, 68:77, 89] = max_activation
+                    encoded_new.data[:, 31:45, 88] = max_activation
+                    encoded_new.data[:, 31:45, 89] = max_activation
+                    encoded_new.data[:, 31:45, 374] = min_activation
+                    encoded_new.data[:, 49:63, 88] = max_activation
+                    encoded_new.data[:, 49:63, 89] = max_activation
+                    encoded_new.data[:, 49:63, 374] = min_activation
+                    encoded_new.data[:, 83:93, 88] = max_activation
+                    encoded_new.data[:, 83:93, 89] = max_activation
+                    encoded_new.data[:, 83:93, 374] = min_activation
+                    
+                    W1 = (model.sae_layers[2].WS1.weight).T
+                    b2 = (model.sae_layers[2].WS2.bias)
+                    W_pinv = torch.linalg.pinv(W1)
+                    encoded_new = encoded_new @ W_pinv + b2
+
+
+                    #encoded_new = F.linear(encoded_new, W2, bias=None)
+
+                    log_probs = dec_model(S, mask, chain_M*chain_M_pos, encoded_new, h_E, E_idx, randn_1, use_input_decoding_order=False)
+                    #for idx, aa in enumerate(alphabet):
+                    #    lines[aa] = (log_probs.data[0, :, idx])#.mean())
+                    #    window_size = 5
+                    #for aa in lines.keys():
+                    
+                    # Create a window of ones
+                    #    weights = np.ones(window_size) / window_size
+                    #    lines[aa] = np.array([np.convolve(lines[aa], weights, mode='valid')]).T
+                    #P_prob = log_probs.data[:, 9:25, 12].mean() # Proline
+                    #prolineprobs.append(P_prob.numpy())
+                        #lines[aa].append(P_prob)
+            #plt.figure()
+            #for aa in list(alphabet):#range(h_V.shape[-2]):
+            #    plt.plot(list(range(h_V.shape[-2]-4)), lines[aa], label=f'{aa}')
+            #plt.legend()
+            #plt.savefig("aa probs changed select res")
+            top_aa = np.argmax(log_probs.data[0, :, :].numpy(), axis=1)
+            print(_S_to_seq(top_aa))
+            
+            np_log_probs = log_probs.data[0, :, :].numpy()
+            probs = np.exp(np_log_probs)
+            probs /= probs.sum(axis=1, keepdims=True)
+
+            seq_array = np.zeros((1000, probs.shape[0]), dtype=int)
+            for i in range(1000):
+                selected_indices = np.array([
+                    np.random.choice(probs.shape[1], p=probs[i])
+                    for i in range(probs.shape[0])
+                ])
+                seq_array[i, :] = selected_indices
+
+            def most_common(x):
+                values, counts = np.unique(x, return_counts=True)
+                return values[np.argmax(counts)]
+
+            most_common_per_column = np.apply_along_axis(most_common, axis=0, arr=seq_array)
+            print(_S_to_seq(most_common_per_column))
+            
+                #for aa in list(alphabet[:-1]):
+                #    plt.plot(val_range, aaprobs[aa], label=f'{aa}')
+                #plt.title("Amino Acid log probabilities")
+                #plt.xlabel(f"Dim {dim+1} Activation")
+                #plt.ylabel("Log Probability")
+                #plt.legend()
+                #plt.savefig(f"Amino Acid log probabilities dim{dim+1}")
+                #first_deriv = np.gradient(prolineprobs, val_range)
+            #    if np.max(prolineprobs) - np.min(prolineprobs) > 1: #np.max(first_deriv) > 0.05 or np.min(first_deriv) < -0.05: #
+            #        plt.plot(val_range, prolineprobs, label=f'{dim}')
+            #        print(dim)
+            #        print(np.max(prolineprobs), np.min(prolineprobs))
+            #plt.legend()
+            #plt.savefig(f'proline select res')
+                #    plt.savefig(f'prolineprob_dim{dim+1}.png')
+                    #print(aa)
+                #    print(np.max(prolineprobs), np.min(prolineprobs))
                 #else:
                 #    print(np.max(prolineprobs), np.min(prolineprobs))
                 
-                #dims 38, 73, 89, 92, 
+                #dims 38, 73, 89, 92,
+            '''
+            
             '''
                 mask_for_loss = mask*chain_M*chain_M_pos
                 scores = _scores(S, log_probs, mask_for_loss) #score only the redesigned part

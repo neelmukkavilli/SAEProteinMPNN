@@ -2,7 +2,7 @@
 
 # --show_img to show 3D PCA plot, do not use wihtout adjusting img_mask_level
 
-input_csv='newsamples500_2'
+input_csv='newlsamples500_2'
 
 python clustering.py \
         --csv $input_csv \
@@ -11,7 +11,6 @@ python clustering.py \
         --return_num_clusters 100 \
         --cluster_mask_level 0.1 \
         --img_mask_level 0.1 \
-        --show_img
 
 cd data_labeling/uniprot
 

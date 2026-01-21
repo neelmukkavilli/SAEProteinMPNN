@@ -174,7 +174,7 @@ def main(args):
         dataset_valid = StructureDataset(args.jsonl_path, truncate=None, max_length=args.max_length, verbose=print_all)
 
 
-    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)#("/home/neelm/data/ProteinMPNN-copy/training/exp_020/model_weights/epoch_last.pt", weights_only=False) 
+    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
     noise_level_print = checkpoint['noise_level']
     model = ProteinMPNN(num_letters=21,
                         node_features=hidden_dim,
@@ -187,6 +187,22 @@ def main(args):
     model.to(device)
     model.load_state_dict(checkpoint['model_state_dict'], strict=False)
     model.eval()
+
+    '''
+    check1path = "../training/exp_020/model_weights/lsample_e250_s500_2/epoch_last.pt"
+    checkpoint1 = torch.load(check1path, map_location=device, weights_only=False)
+
+    desired_keys = ['encoder_layers.0.WS1.weight', 'encoder_layers.0.WS1.bias', 'encoder_layers.0.WS2.weight', 'encoder_layers.0.WS2.bias',
+    'encoder_layers.1.WS1.weight', 'encoder_layers.1.WS1.bias', 'encoder_layers.1.WS2.weight', 'encoder_layers.1.WS2.bias',
+    'encoder_layers.2.WS1.weight', 'encoder_layers.2.WS1.bias', 'encoder_layers.2.WS2.weight', 'encoder_layers.2.WS2.bias']
+    filtered_state_dict = {}
+    for k, v in checkpoint1['model_state_dict'].items():
+        if k in desired_keys:
+            k = k[15:]
+            filtered_state_dict[k] = v
+    
+    model.sae_layers.load_state_dict(filtered_state_dict, strict=True)
+    '''
 
     if print_all:
         print(40*'-')
@@ -224,7 +240,9 @@ def main(args):
         if not os.path.exists(base_folder + 'probs'):
             os.makedirs(base_folder + 'probs') 
     
-    csv_output = 'encodings/output_' + args.csv_output + '.csv'
+    csv_outputs = []
+    for i in range(3):
+        csv_outputs.append(f'encodings/output_' + args.csv_output + '_' + str(i) + '.csv')
 
     # Timing
     start_time = time.time()
@@ -319,13 +337,21 @@ def main(args):
                 if error != True:
                     randn_1 = torch.randn(chain_M.shape, device=X.device)
                     h_V, h_E, original, encoded, decoded, E_idx = model(X, S, mask, chain_M*chain_M_pos, residue_idx, chain_encoding_all, randn_1, args.show_graphs, args.return_log_probs, SAE_level=args.SAE_level)
-                    mask_for_empty = np.asarray(S[0] != 20)
-                    encoded_ = np.round(encoded.numpy()[0,:,:], decimals=5)[mask_for_empty]
-                    res_df = pd.DataFrame(res_labels, columns = ['identifier'])
-                    encoded_df = pd.DataFrame(encoded_, columns = range(1, 1025))
-                    encoded_df = pd.concat([res_df, encoded_df], axis=1)
-                    write_header = os.path.getsize(csv_output) == 0
-                    encoded_df.to_csv(csv_output, mode='a', header = write_header, index=False)
+                    if args.show_graphs != True:
+                        for i in range(3):
+                            mask_for_empty = np.asarray((S[0] != 20).cpu())
+                            encoded_ = np.round(model.encoded_act[i].cpu().numpy()[0,:,:], decimals=5)[mask_for_empty]
+                            res_df = pd.DataFrame(res_labels, columns = ['identifier'])
+                            encoded_df = pd.DataFrame(encoded_, columns = range(1, 1025))
+                            encoded_df = pd.concat([res_df, encoded_df], axis=1)
+                            write_header = os.path.getsize(csv_outputs[i]) == 0
+                            encoded_df.to_csv(csv_outputs[i], mode='a', header = write_header, index=False)
+                    else:
+                        print("Saving graphs")
+                        mask_for_empty = np.asarray((S[0] != 20).cpu())
+                        encoded_ = np.round(model.encoded_act[2].cpu().numpy()[0,:,:128], decimals=5)[mask_for_empty]
+                        plt.imshow(encoded_, aspect='auto')
+                        plt.savefig('node_encoded.png', dpi=300)
                 else:
                     print("Error was had")
                     print(args.pdb_path)
@@ -347,7 +373,7 @@ def main(args):
                     encoded_df.to_csv(csv_output, mode='w', index=False)
                 else:
                     write_header = os.path.getsize(csv_output) == 0
-                    encoded_df.to_csv(csv_output, mode='a', header = write_header, index=False)
+                    encoded_df.to_csv(csv_output, mode='a', header = write_header, index=False)   
             elif args.return_log_probs:
                 error, res_labels = create_labels(args.pdb_path, args.SAE_level)
                 if error != True:
@@ -491,7 +517,7 @@ if __name__ == "__main__":
     argparser.add_argument("--SAE_level", type=str, default="node", help="SAE at either node or edge")
     argparser.add_argument("--show_graphs", action="store_true", default=False, help="Display and/or save to png the original, encoded, and decoded heatmaps")
     argparser.add_argument("--return_log_probs", action="store_true", default=False, help="Doesn't store encodings, model only returns log probs")
-    argparser.add_argument("--csv_output", type=str, default="encodings/test.csv")
+    argparser.add_argument("--csv_output", type=str, default="test")
     argparser.add_argument("--suppress_print", type=int, default=1, help="0 for False, 1 for True")
     argparser.add_argument("--ca_only", action="store_true", default=False, help="Parse CA-only structures and use CA-only models (default: false)")   
     argparser.add_argument("--path_to_model_weights", type=str, default="", help="Path to model weights folder;") 

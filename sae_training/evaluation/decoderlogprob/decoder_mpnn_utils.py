@@ -48,9 +48,9 @@ def _scores(S, log_probs, mask):
     scores = torch.sum(loss * mask, dim=-1) / torch.sum(mask, dim=-1)
     return scores
 
-def _S_to_seq(S, mask):
+def _S_to_seq(S, mask=None):
     alphabet = 'ACDEFGHIKLMNPQRSTVWYX'
-    seq = ''.join([alphabet[c] for c in S[0]])
+    seq = ''.join([alphabet[c] for c in S.tolist()])
     #seq = ''.join([alphabet[c] for c, m in zip(S.tolist(), mask.tolist()) if m > 0])
     return seq
 
@@ -148,7 +148,7 @@ def parse_PDB_biounits(x, atoms=['N','CA','C'], chain=None):
             resa,resn = resn[-1],int(resn[:-1])-1
         else: 
             resa,resn = "",int(resn)-1
-#         resn = int(resn)
+            resn = int(resn)
         if resn < min_resn: 
             min_resn = resn
         if resn > max_resn: 
@@ -738,7 +738,7 @@ class SAELayer(nn.Module):
 
         if show_graphs:
         # Original Graph
-            h_V_graph = np.array(X.numpy()[0, :, 10, :])
+            h_V_graph = np.array(X.numpy()[0, :, :])
             print(h_V_graph.shape)
             h_V_graph = normalize(h_V_graph)
             imgO = plt.imshow(h_V_graph)
@@ -748,7 +748,7 @@ class SAELayer(nn.Module):
             plt.show()
 
             # New Graph
-            h_V_original_graph = np.array(decoded.numpy()[0, :, 10, :])
+            h_V_original_graph = np.array(decoded.numpy()[0, :, :])
             h_V_original_graph = normalize(h_V_original_graph)
             #print(h_V_decoded_graph.shape)
             imgD = plt.imshow(h_V_original_graph)
@@ -757,7 +757,7 @@ class SAELayer(nn.Module):
             plt.savefig("decoded.png")
             plt.show()
                 
-            encoded_graph = np.array(encoded.numpy()[0, :, 10, :128])
+            encoded_graph = np.array(encoded.numpy()[0, :, :128])
             encoded_graph = normalize(encoded_graph)
             activation_counts = np.all(encoded_graph==0, axis=0)
             imgE = plt.imshow(encoded_graph,)
@@ -1215,16 +1215,15 @@ class Decoder(nn.Module):
         mask_fw = mask_1D * (1. - mask_attend)
 
         h_EXV_encoder_fw = mask_fw * h_EXV_encoder
-
+        #print(h_EXV_encoder_fw)
         for layer in self.decoder_layers:
             # Masked positions attend to encoder information, unmasked see. 
             h_ESV = cat_neighbors_nodes(h_V, h_ES, E_idx)
             h_ESV = mask_bw * h_ESV + h_EXV_encoder_fw
             h_V = layer(h_V, h_ESV, mask)
-
         logits = self.W_out(h_V)
         log_probs = F.log_softmax(logits, dim=-1)
-        return log_probs
+        return logits, log_probs
 
 model = ProteinMPNN(node_features=128, 
                         edge_features=128, 
