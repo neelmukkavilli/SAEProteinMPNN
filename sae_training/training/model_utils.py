@@ -671,6 +671,23 @@ class ProteinMPNN(nn.Module):
             for _ in range(num_decoder_layers)
         ])
         self.W_out = nn.Linear(hidden_dim, num_letters, bias=True)
+    
+    def sae_grad_calc(self, log_probs, S, encoded, mask, chain_M):
+        grad_avgs = torch.zeros_like(encoded)
+        grad_avgs = np.round(grad_avgs.cpu().data.numpy(), 3)
+        mask_for_loss = (mask * chain_M)
+        for r in range(log_probs.shape[1]):
+            S = S.clone()
+            S[:, r] = 0
+            loss, loss_av, true_false = loss_nll(S, log_probs, mask_for_loss)
+            encoded.retain_grad()
+            loss_av.backward(retain_graph=True)
+            grad_avgs = np.round(grad_avgs, 3)
+            grad_avgs = grad_avgs + (np.round(encoded.grad.cpu().data.numpy(), 3) / (log_probs.shape[1]*log_probs.shape[0]))
+            encoded.grad = None
+        print(grad_avgs)
+        print(min(grad_avgs))
+        print(max(grad_avgs))
 
     def forward(self, X, S, mask, chain_M, residue_idx, chain_encoding_all, SAE_level, reinsert_SAE=False):
         """ Graph-conditioned sequence model """
@@ -713,12 +730,9 @@ class ProteinMPNN(nn.Module):
         
         if True: # Don't collect gradients for decoder
             # Concatenate sequence embeddings for autoregressive decoder
-            '''
-            print(encoded.is_leaf)
-            print(encoded.requires_grad)
-            
+        
             h_V = decoded
-            '''
+
             h_S = self.W_s(S)
             h_ES = cat_neighbors_nodes(h_S, h_E, E_idx)
 
@@ -745,33 +759,11 @@ class ProteinMPNN(nn.Module):
             logits = self.W_out(h_V)
             log_probs = F.log_softmax(logits, dim=-1)
 
-            '''
-            grad_avgs = torch.zeros_like(encoded)
-            grad_avgs = np.round(grad_avgs.cpu().data.numpy(), 3)
-            mask_for_loss = (mask * chain_M)
-            for r in range(log_probs.shape[1]):
-                S = S.clone()
-                S[:, r] = 0
-                loss, loss_av, true_false = loss_nll(S, log_probs, mask_for_loss)
-                encoded.retain_grad()
-                loss_av.backward(retain_graph=True)
-                grad_avgs = np.round(grad_avgs, 3)
-                grad_avgs = grad_avgs + (np.round(encoded.grad.cpu().data.numpy(), 3) / (log_probs.shape[1]*log_probs.shape[0]))
-                encoded.grad = None
-            print(grad_avgs)
-            '''
+        
+        self.sae_grad_calc(log_probs, S, encoded, mask, chain_M)
+            
         return log_probs, self.input_act[2], self.encoded_act[2], self.output_act[2]#original, encoded, decoded
         
-def sae_grad_calc(log_probs, S, encoded, mask, chain_M):
-    mask_for_loss = (mask * chain_M)
-    grad_avgs = torch.zeros_like(encoded)
-    for r in range(log_probs.shape[1]):
-        S[:, r] = 0
-        loss, loss_av, true_false = loss_nll(S, log_probs, mask_for_loss)
-        encoded.retain_grad()
-        loss.backward
-        grad_avgs += (encoded.grad / (log_probs.shape[1]*log_probs.shape[0]))
-    grad_avgs = round(grad_avgs.data.numpy(), 3)
 
 class NoamOpt:
     "Optim wrapper that implements rate."

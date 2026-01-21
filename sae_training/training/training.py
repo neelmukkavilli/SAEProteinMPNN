@@ -26,7 +26,7 @@ def main(args):
     import subprocess
     from concurrent.futures import ProcessPoolExecutor    
     from utils import worker_init_fn, get_pdbs, loader_pdb, build_training_clusters, PDB_dataset, StructureDataset, StructureLoader
-    from model_utils import featurize, loss_smoothed, loss_nll, SAE_loss, get_std_opt, ProteinMPNN, store_inputs_and_losses, reinit_anthropic, remove_parallel_grads, per_sample_SAE_loss, reinit_classic, sae_grad_calc
+    from model_utils import featurize, loss_smoothed, loss_nll, SAE_loss, get_std_opt, ProteinMPNN, store_inputs_and_losses, reinit_anthropic, remove_parallel_grads, per_sample_SAE_loss, reinit_classic
 
     sparse_weight, mse_weight, reinit_every_n_steps = args.sparse_weight, args.mse_weight, args.reinit_every_n_steps
     
@@ -109,6 +109,7 @@ def main(args):
         activity_mask = torch.tensor(np.zeros((3, 1024)))
         reservoir_inputs = []
         reservoir_losses = []
+    activity_mask = torch.tensor(np.zeros((3, 1024)))
     '''
     check1path = "./exp_020/model_weights/lsample_e250_s500_2/epoch_last.pt"
     checkpoint1 = torch.load(check1path, map_location=device, weights_only=False)
