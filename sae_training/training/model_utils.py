@@ -686,8 +686,8 @@ class ProteinMPNN(nn.Module):
             grad_avgs = grad_avgs + (np.round(encoded.grad.cpu().data.numpy(), 3) / (log_probs.shape[1]*log_probs.shape[0]))
             encoded.grad = None
         print(grad_avgs)
-        print(min(grad_avgs))
-        print(max(grad_avgs))
+        print(np.min(grad_avgs))
+        print(np.max(grad_avgs))
 
     def forward(self, X, S, mask, chain_M, residue_idx, chain_encoding_all, SAE_level, reinsert_SAE=False):
         """ Graph-conditioned sequence model """

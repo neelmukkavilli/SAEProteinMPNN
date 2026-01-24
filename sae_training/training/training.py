@@ -291,9 +291,6 @@ def main(args):
                 epoch_activity_mask.zero_()
                 norm_loss_ = np.format_float_positional(np.float32(validation_norm_loss), unique=False, precision=3)
                 '''
-            print(encoded.is_leaf)
-            with torch.grad():
-                sae_grad_calc(log_probs, S, encoded, mask, chain_M)
 
             train_specificity_ = np.format_float_positional(np.float32(train_specificity.item()), unique=False, precision=3)
             train_sparse_loss_ = np.format_float_positional(np.float32(train_sparse_loss), unique=False, precision=3)

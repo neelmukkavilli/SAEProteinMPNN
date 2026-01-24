@@ -1,4 +1,3 @@
-sae_training/evaluation/inputs/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -136,11 +135,15 @@ dmypy.json
 /sae_training/evaluation/encodings/
 /sae_training/evaluation/input_test/
 /sae_training/evaluation/old_files/
-/sae_training/training/oldfiles/ortho_test.py
 /sae_training/evaluation/decoderlogprob/lsample_proline_allres/
 /sae_training/evaluation/decoderlogprob/prolinprob_test/
 /sae_training/evaluation/.vscode/
+
+/sae_training/training/oldfiles/
 /sae_training/training/.vscode/
+/sae_training/training/exp_020/model_weights/
+/sae_training/training/pdb_2021aug02/
+/sae_training/training/pdb_2021aug02_sample/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -271,7 +274,4 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-/sae_training/training/exp_020/model_weights/
-/sae_training/training/pdb_2021aug02/
-/sae_training/training/pdb_2021aug02_sample/
-/sae_training/evaluation/data_labeling/uniprot/out/
+sae_training/mdanalysis/.vscode/settings.json

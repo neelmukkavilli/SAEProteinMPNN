@@ -15,8 +15,8 @@ fi
 chains_to_design=""
 
 python protein_mpnn_eval.py \
-        --path_to_model_weights "../training/exp_020/model_weights/largeruns/reinit_class/llb1e-1" \
-        --model_name "epoch10" \
+        --path_to_model_weights "../training/exp_020/model_weights/validtest" \
+        --model_name "epoch370" \
         --SAE_level "node" \
         --show_graphs \
         --pdb_path $path_to_PDB \
