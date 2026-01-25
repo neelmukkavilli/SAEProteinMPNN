@@ -127,6 +127,24 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+/evaluation/created_data/
+/evaluation/created_data/
+/evaluation/created_data/uniprot/out/
+/evaluation/inputs/
+/evaluation/disregarded/
+/evaluation/encodings/
+/evaluation/input_test/
+/evaluation/old_files/
+/evaluation/decoderlogprob/lsample_proline_allres/
+/evaluation/decoderlogprob/prolinprob_test/
+/evaluation/.vscode/
+
+/training/oldfiles/
+/training/.vscode/
+/training/exp_020/model_weights/
+/training/pdb_2021aug02/
+/training/pdb_2021aug02_sample/
+
 
 /sae_training/evaluation/created_data/
 /sae_training/evaluation/created_data/uniprot/out/
