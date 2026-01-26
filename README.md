@@ -26,17 +26,17 @@ The trained model creates sparse representations (sometimes referred to as featu
 
 Our SAE uses 2 loss functions: MSE Reconstruction Loss (L2) and Sparse Loss (L1 Regularization)
 
-**MSE Reconstruction Loss**
-$'MSE Loss = \sum_{i}^{j}(x_{i}-\widehat{x}_i)^2'$
+**MSE Reconstruction Loss**\
+MSE Loss = $\sum_{i}^{j}{(x_{i}-\hat{x}_i)^2}$
 
-**Sparse Loss**
-$'Sparse Loss = \sum_{i}^{k}\left|z_i \right|'$
+**Sparse Loss**\
+Sparse Loss = $\sum_{i}^{k}\left|z_i \right|$
 
-- 'k' = # of neurons in the sparse layer
-- 'j' = # of neurons in the orginal and decoded layers
-- 'x' = original activations
-- 'z' = sparse encoded activations
-- '$\hat{x}$ = decoded activations
+- k = # of neurons in the sparse layer
+- j = # of neurons in the orginal and decoded layers
+- x = original activations
+- z = sparse encoded activations
+- $\hat{x}$ = decoded activations
 
 ## SAE Architecture
 
@@ -50,9 +50,11 @@ The SAE encoded latent space is by default, 8 times larger than the input latent
 
 The SAE is defined as follows:
 
-**SAE Encoder**
-$'z_i = ReLU(W_1\cdot(x_i - b_2) +b_1)'$
-**SAE Decoder**
-$'\widehat{x_i} = W_2\cdot z_i + b_2 '*
+**SAE Encoder**\
+$z_i = ReLU(W_1\cdot(x_i - b_2) +b_1)$
+
+**SAE Decoder**\
+$\hat{x_i} = W_2 \cdot z_i + b_2$
+
 
 The input is first substracted by a pre-encoder bias which is tied to the second layer's bias as suggested by [Anthropic](https://transformer-circuits.pub/2023/monosemantic-features).
