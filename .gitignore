@@ -145,6 +145,7 @@ dmypy.json
 /training/pdb_2021aug02/
 /training/pdb_2021aug02_sample/
 
+/analysis/.vscode/
 
 /sae_training/evaluation/created_data/
 /sae_training/evaluation/created_data/uniprot/out/
