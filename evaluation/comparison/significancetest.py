@@ -5,17 +5,28 @@ import scipy.stats as sci
 import sklearn
 from sklearn.metrics import average_precision_score
 from sklearn.metrics import matthews_corrcoef
+from sklearn.feature_selection import mutual_info_regression, mutual_info_classif
 import matplotlib.pyplot as plt
-import polars as pl
+#import polars as pl
 from sklearn import metrics
+import pickle
 
-model = 'lsamples500_2'  # Change this to the desired model name
+model = 'slow_exp2_se4_2'  # Change this to the desired model name
 
 # Load feature data and encodings
-dssp_path = '/WAVE/bio/ML/SAE_train/SAEProteinMPNN/sae_training/evaluation/node_features.csv'
-encodings_path = '/WAVE/bio/ML/SAE_train/SAEProteinMPNN/sae_training/evaluation/encodings/normalized_encodings_' + model + '.csv'
+dssp_path = '/WAVE/bio/ML/SAE_train/SAEProteinMPNN/evaluation/created_data/features/node_features.csv'
+encodings_path = '/WAVE/bio/ML/SAE_train/SAEProteinMPNN/evaluation/created_data/encodings/output_' + model + '.pkl'
 
-encodings = pl.read_csv(encodings_path).to_pandas()
+#encodings = pl.read_csv(encodings_path).to_pandas()
+dfs = []
+with open(encodings_path, "rb") as f:
+    while True:
+        try:
+            dfs.append(pickle.load(f))
+        except EOFError:
+            break
+    encodings = pd.concat(dfs, ignore_index=True)
+
 dssp = pd.read_csv(dssp_path)
 print("read data")
 # Filter data to make sure there are entries for both sets of data and remove duplicates
@@ -40,12 +51,12 @@ print("filtered data")
 
 res_labels = encodings.iloc[:, 0]
 encodings=encodings.iloc[:, 1:]
-#np.random.seed(0)
-#mask = np.random.rand(encodings.shape[0]) < 0.1
-#encodings = encodings.iloc[mask, :]
-#dssp = dssp.iloc[mask, :]
-#res_labels = res_labels.iloc[mask]
-
+np.random.seed(0)
+mask = np.random.rand(encodings.shape[0]) < 0.01
+encodings = encodings.iloc[mask, :]
+dssp = dssp.iloc[mask, :]
+res_labels = res_labels.iloc[mask]
+'''
 # ROC AUC Thresh = 0.7
 # Pearson Thresh = 0.5
 
@@ -72,7 +83,7 @@ encodings=encodings.iloc[:, 1:]
 # Beta strand: 26, Helix: 13, Disulfide bond: 17, Turn: 1, Glycosylation: 4, Transmembrane: 5, Zinc finger: 7, Coiled coil: 45, Initiator methionine: 295, Cross-link: 49, Peptide: 17, Signal: 13
 # DSSP
 # -: 9, E: 66, G: 5, H: 46, I: 4, S: 6, T: 43, function: 54, shape: 17, ASA: 63, phi: 11, psi: 2, 2: 1, 3: 13, 5: 8, 6: 2, 
-
+'''
 alphabet = list('ACDEFGHIKLMNPQRSTVWYX')  # Standard amino acids
 # Anova test, not used in favor of F1 scores
 def ANOVA(feature_act, encodings, aa, neuron):
@@ -101,9 +112,51 @@ def safe_pearsonr(dssp, encodings, feat, dim):
 
     r, p = sci.pearsonr(x, y)
     if r > 0.5 or r < -0.5:
-        return 1#print(r, p, dim, feat)
+        print(r, p, dim, feat)
+        return 1
     else:
         return 0
+
+def mi_class(dssp, encodings, feat, dim):
+    x = dssp.to_numpy().reshape(-1, 1)
+    y = encodings.to_numpy()
+
+    #mask = np.isfinite(x) & np.isfinite(y)
+    #x = x[mask]
+    #y = y[mask]
+
+    #if np.sum(x) == 0 or np.sum(y) == 0:
+    #    return 0
+    #if np.std(x) == 0 or np.std(y) == 0:
+    #    return 0
+    
+    mi = mutual_info_classif(x, y)
+    if mi > 0.3:
+        print(mi, dim)
+        return 1
+    else:
+        #print(mi, dim)
+        return 0
+
+def mi_regress(dssp, encodings, feat, dim):
+    x = dssp.to_numpy()
+    y = encodings.to_numpy().reshape(-1, 1)
+
+    mask = np.isfinite(x) & np.isfinite(y)
+    x = x[mask]
+    y = y[mask]
+
+    if np.sum(x) == 0 or np.sum(y) == 0:
+        return 0
+    if np.std(x) == 0 or np.std(y) == 0:
+        return 0
+    
+    mi = mutual_info_regression(x, y)
+    if mi > 0.3:
+        print(feat, dim)
+        return 1
+    else:
+        return 0    
 # F1 scores
 def get_f1_scores(thresh, feature_act):
 
@@ -199,6 +252,7 @@ def eval_roc_auc(activations, feature_act, feature, dim, thresh=0.7, reverse=Fal
             #if print_always:
             #    print(score, dim, feature, "reversed")                
     else:
+        print(n, feature, dim)
         return 0
 
 def uniprot_cat(uniprot_features, n):
@@ -303,7 +357,7 @@ for dim in testing_dims:
     plt.show()
     plt.savefig(f"boxplots{dim}")
 '''
-
+'''
 ## normalized_encodings_newlsamples500_2, thresh auc = +-0.5, r = +-0.7
 #H, B, E, T = 3, 0, 15, 0 -> 0.00293, 0, 0.0146, 0
 #Function, Shape = ,  -> 0., 
@@ -325,18 +379,29 @@ for dim in testing_dims:
 #ASA, phi, psi, bfactor, xy, xz, yz = 65, 9, 9, 0, 0, 0, 0
 #philic, phobic, SB = 0, 0, 0
 #0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 = 0, 1, 7, 26, 0, 9, 3, 0, 0, 0, 0, 0, 0, 0
-
+'''
 #plt.clf()
 
 n_dims = encodings.shape[-1]
-secondary_structures = ['H', 'B', 'E', 'T']
+secondary_structures = ['H', 'B', 'E', 'G', 'I', 'T', 'S', '-']
 counter = 0
 num_dims_significant = []
 significant_features = []
+
+#for dim in range(n_dims):
+#    activation = encodings.iloc[:, dim]
+#    counter_ss += mi_class(activation, ss_one_hot['H'], 'H', dim)
+#    counter_aa += mi_class(activation, aa_one_hot['A'], 'A', dim)
+#print(counter_ss)
+#print(counter_aa)
+
+
+'''
 for ss in secondary_structures:
     for dim in range(n_dims):
         activation = encodings.iloc[:, dim]
         counter += eval_roc_auc(activation, ss_one_hot[ss], ss, dim)
+        #counter += mi_class(activation, ss_one_hot[ss], ss, dim)
     print(ss)
     print(counter)
     significant_features.append(ss)
@@ -347,6 +412,7 @@ for group in cat_dict['function'].keys():
     for dim in range(n_dims):
         activation = encodings.iloc[:, dim]
         counter += eval_roc_auc(activation, feature_act, group, dim)
+        #counter += mi_class(activation, feature_act, group, dim)
 print("function")
 print(counter)
 significant_features.append('AA chemistry')
@@ -356,6 +422,7 @@ for group in cat_dict['shape'].keys():
     feature_act = aa_one_hot[cat_dict['shape'][group]].any(axis='columns').astype(int)
     for dim in range(n_dims):
         activation = encodings.iloc[:, dim]
+        #counter += mi_class(activation, feature_act, group, dim)
         counter += eval_roc_auc(activation, feature_act, group, dim)
 print("shape")
 print(counter)
@@ -367,20 +434,40 @@ for feat in dssp.columns[3:]:
     for dim in range(n_dims):
         activation = encodings.iloc[:, dim]
         counter += safe_pearsonr(activation, feature_act, feat, dim)
+        #counter += mi_regress(activation, feature_act, feat, dim)
     print(feat)
     print(counter)
     significant_features.append(feat)
     num_dims_significant.append(counter)
     counter = 0
-
-
+'''
+feat = 'ASA'
+feature_act = dssp[feat]
+'''
+for dim in range(n_dims):
+    activation = encodings.iloc[:, dim]
+    safe_pearsonr(activation, feature_act, feat, dim)
+'''
+dims = [252]
+rscore = [0.7882527056]
+for idx, dim in enumerate(dims):
+    activation = encodings.iloc[:, dim]
+    ax = plt.scatter(activation, feature_act)
+    plt.xlabel('Sparse Activation')
+    #plt.xlim(0, 1)
+    #plt.ylim(0, 1)
+    plt.ylabel('ASA')
+    plt.title(f'ASA correlation for Dimension {dim} with r = {round(rscore[idx], 3)}')#) {:.3f}'.format(rscore[idx]))
+    #plt.annotate("r\u00B2 = {:.3f}".format(rscore[idx]), (0, 1))
+    plt.savefig("scatterplot.png", dpi=500)
+    plt.show()
 
 #bar_heights = [7, 6, 81, 9, 48, 0, 8, 44, 55, 11, 65, 9, 9, 0, 0, 0, 0, 0, 0, 0, 0, 1, 7, 26, 0, 9, 3, 0, 0, 0, 0]
 #bar_labels = ['No Structure', 'Beta bridge', 'Beta strand', '3-10 helix', 'Alpha helix', 'Pi helix', 'Bend', 'Turn', 
 #            'AA chemistry', 'AA shape', 'Surface area', 'Phi angle', 'Psi angle', 'Bfactor',
 #            'xy', 'xz', 'yz', 'Hydrophobic', 'Hydrophilic', 'Salt bridge', 
 #            '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10']
-
+'''
 bar_heights = num_dims_significant
 bar_labels = significant_features
 
@@ -405,10 +492,10 @@ ax.invert_yaxis()
 # Add Plot Title
 ax.set_title("Number of Dimensions Related to Features")
 
-plt.savefig("Bar plot of feature dims output lsamples500_2.png", bbox_inches='tight')
+plt.savefig(f"{model} bar plot of feature correlations", bbox_inches='tight')
 plt.show()
 plt.clf()
-
+'''
 
 '''
 for dim_of_interest in range(373, 376):

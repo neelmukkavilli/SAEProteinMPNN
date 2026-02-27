@@ -7,6 +7,7 @@ def main(args):
     import shutil
     import warnings
     import numpy as np
+    import pickle
     import torch
     from torch import optim
     from torch.utils.data import DataLoader
@@ -175,18 +176,31 @@ def main(args):
 
 
     checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+
+    # Infer expansion size of latent space
+    size = int(checkpoint['model_state_dict']['sae_layers.0.WS1.weight'].shape[0] / 128)
+
     noise_level_print = checkpoint['noise_level']
     model = ProteinMPNN(num_letters=21,
                         node_features=hidden_dim,
                         edge_features=hidden_dim, 
                         hidden_dim=hidden_dim,
+                        expansion=size,
                         num_encoder_layers=num_layers, 
                         num_decoder_layers=num_layers, 
                         augment_eps=args.backbone_noise, 
                         k_neighbors=checkpoint['num_edges'])
-    model.to(device)
+    model.to(device)    
+
     model.load_state_dict(checkpoint['model_state_dict'], strict=False)
     model.eval()
+
+    protein_name = args.pdb_path[-8:-4]
+    model_name = '/'.join(args.path_to_model_weights.split('/')[-1:])
+    if args.show_graphs:
+        graph_info = [model_name, protein_name, args.SAE_level]
+    else:
+        graph_info = False
 
     '''
     check1path = "../training/exp_020/model_weights/lsample_e250_s500_2/epoch_last.pt"
@@ -242,7 +256,7 @@ def main(args):
     
     csv_outputs = []
     for i in range(3):
-        csv_outputs.append(f'encodings/output_' + args.csv_output + '_' + str(i) + '.csv')
+        csv_outputs.append(f'created_data/encodings/output_' + args.csv_output + '_' + str(i) + '.pkl')
 
     # Timing
     start_time = time.time()
@@ -336,22 +350,32 @@ def main(args):
                 error, res_labels = create_labels(args.pdb_path, args.SAE_level)
                 if error != True:
                     randn_1 = torch.randn(chain_M.shape, device=X.device)
-                    h_V, h_E, original, encoded, decoded, E_idx = model(X, S, mask, chain_M*chain_M_pos, residue_idx, chain_encoding_all, randn_1, args.show_graphs, args.return_log_probs, SAE_level=args.SAE_level)
+                    h_V, h_E, original, encoded, decoded, E_idx = model(X, S, mask, chain_M*chain_M_pos, residue_idx, chain_encoding_all, randn_1, graph_info, args.return_log_probs, SAE_level=args.SAE_level)
                     if args.show_graphs != True:
                         for i in range(3):
                             mask_for_empty = np.asarray((S[0] != 20).cpu())
                             encoded_ = np.round(model.encoded_act[i].cpu().numpy()[0,:,:], decimals=5)[mask_for_empty]
                             res_df = pd.DataFrame(res_labels, columns = ['identifier'])
-                            encoded_df = pd.DataFrame(encoded_, columns = range(1, 1025))
+                            encoded_df = pd.DataFrame(encoded_, columns = range(1, (128*size + 1)))
                             encoded_df = pd.concat([res_df, encoded_df], axis=1)
-                            write_header = os.path.getsize(csv_outputs[i]) == 0
-                            encoded_df.to_csv(csv_outputs[i], mode='a', header = write_header, index=False)
-                    else:
-                        print("Saving graphs")
-                        mask_for_empty = np.asarray((S[0] != 20).cpu())
-                        encoded_ = np.round(model.encoded_act[2].cpu().numpy()[0,:,:128], decimals=5)[mask_for_empty]
-                        plt.imshow(encoded_, aspect='auto')
-                        plt.savefig('node_encoded.png', dpi=300)
+                            #write_header = os.path.getsize(csv_outputs[i]) == 0
+                            with open(csv_outputs[i], "ab") as f:
+                                pickle.dump(encoded_df, f)
+                            #encoded_df.to_pickle(csv_outputs[i], mode='a', header = True, index=False)
+                            #encoded_df.to_csv(csv_outputs[i], mode='a', header = write_header, index=False)
+
+                        #print("Saving graphs")
+                        #for i in range(3):
+                            #mask_for_empty = np.asarray((S[0] != 20).cpu())
+                            #encoded_ = np.round(model.encoded_act[i].cpu().numpy()[0,:,:128], decimals=5)[mask_for_empty]
+                            #input_ = np.round(model.input_act[i].cpu().numpy()[0,:,:128], decimals=5)[mask_for_empty]
+                            #decoded_ = np.round(model.output_act[i].cpu().numpy()[0,:,:128], decimals=5)[mask_for_empty]
+                            #plt.imshow(encoded_, aspect='auto')
+                            #plt.savefig(f'{model_name}_{protein_name}_layer_{i}_node_encoded.png', dpi=300)
+                            #plt.imshow(input_, aspect='auto')
+                            #plt.savefig(f'{model_name}_{protein_name}_layer_{i}_node_input.png', dpi=300)
+                            #plt.imshow(decoded_, aspect='auto')
+                            #plt.savefig(f'{model_name}_{protein_name}_layer_{i}_node_decoded.png', dpi=300)
                 else:
                     print("Error was had")
                     print(args.pdb_path)
@@ -368,15 +392,19 @@ def main(args):
                     encoded_ = np.round(model.encoded_act[i].cpu().numpy()[0,:,:,:], decimals=5)
                     encoded = np.reshape(np.round(model.encoded_act[i].cpu().numpy()[0,mask_for_empty.squeeze(0),:,:], decimals=5), (-1, model.encoded_act[i].shape[3]))
                     label_df = pd.DataFrame(labels, columns=['identifier'])
-                    encoded_df = pd.DataFrame(encoded, columns = range(1, 1025))
+                    encoded_df = pd.DataFrame(encoded, columns = range(1, (128*size + 1)))
                     encoded_df = pd.concat([label_df, encoded_df], axis = 1)
                     mask = pd.DataFrame(np.random.rand(encoded_df.shape[0]) < 1/48) # Only return ~2% of the data to avoid huge files
                     encoded_df = encoded_df[mask[0]]
                     if not os.path.exists(csv_outputs[i]):
-                        encoded_df.to_csv(csv_outputs[i], mode='w', index=False)
+                        with open(csv_outputs[i], "w") as f:
+                            pickle.dump(encoded_df, f)#.to_csv(csv_outputs[i], mode='w', index=False)
+                        #encoded_df.to_csv(csv_outputs[i], mode='w', index=False)
                     else:
-                        write_header = os.path.getsize(csv_outputs[i]) == 0
-                        encoded_df.to_csv(csv_outputs[i], mode='a', header = write_header, index=False)   
+                        with open(csv_outputs[i], "ab") as f:
+                            pickle.dump(encoded_df, f)
+                        #write_header = os.path.getsize(csv_outputs[i]) == 0
+                        #encoded_df.to_csv(csv_outputs[i], mode='a', header = write_header, index=False)   
             elif args.return_log_probs:
                 error, res_labels = create_labels(args.pdb_path, args.SAE_level)
                 if error != True:
@@ -522,6 +550,7 @@ if __name__ == "__main__":
     argparser.add_argument("--SAE_level", type=str, default="node", help="SAE at either node or edge")
     argparser.add_argument("--show_graphs", action="store_true", default=False, help="Display and/or save to png the original, encoded, and decoded heatmaps")
     argparser.add_argument("--return_log_probs", action="store_true", default=False, help="Doesn't store encodings, model only returns log probs")
+    argparser.add_argument("--expansion", type=int, default=8, help="Factor by which latent space increases")
     argparser.add_argument("--csv_output", type=str, default="test")
     argparser.add_argument("--suppress_print", type=int, default=1, help="0 for False, 1 for True")
     argparser.add_argument("--ca_only", action="store_true", default=False, help="Parse CA-only structures and use CA-only models (default: false)")   

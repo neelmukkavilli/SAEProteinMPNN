@@ -14,7 +14,7 @@ import random
 import itertools
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
-
+import seaborn as sns
 #A number of functions/classes are adopted from: https://github.com/jingraham/neurips19-graph-protein-design
 
 def parse_fasta(filename,limit=-1, omit=[]):
@@ -747,23 +747,101 @@ class EncLayer(nn.Module):
         '''
         return h_V, h_E#, original, encoded              
 
+def make_graphs(data, name, layer, graph_info):
+    # graph_info = [model_name, protein, edge/node]
+    data_graph = normalize(np.array(data.numpy()[0, :, :]))
+    plt.figure()
+    img0 = plt.imshow(data_graph)
+    plt.colorbar(img0, shrink=0.6)
+    plt.xlabel("Dimension")
+    plt.ylabel("Residue")
+    plt.title(f"{name} Activations at Layer {layer + 1}")
+    plt.savefig(f"{graph_info[0]}_{graph_info[1]}_layer_{layer}_{graph_info[2]}_{name}.png", dpi=300)
+    plt.show()
+
 class SAELayer(nn.Module):
     def __init__(self, num_in, expansion=8):
         super(SAELayer, self).__init__()
         self.num_hidden = num_in
         self.expansion = expansion
 
-        self.WS1 = nn.Linear(num_in, num_in*8, bias=True)
-        self.WS2 = nn.Linear(num_in*8, num_in, bias=True)
+        self.WS1 = nn.Linear(num_in, num_in*expansion, bias=True)
+        self.WS2 = nn.Linear(num_in*expansion, num_in, bias=True)
         self.act = nn.ReLU()
 
-    def forward(self, X, show_graphs):
+    def forward(self, X, idx, graph_info=False):
         encoded = self.act(self.WS1(X - self.WS2.bias))
         decoded = self.WS2(encoded)
 
-        if show_graphs:
+        #if graph_info:
+            #make_graphs(X, "Input", idx, graph_info)
+            #make_graphs(decoded, "Decoded", idx, graph_info)
+            #make_graphs(encoded, "Sparse", idx, graph_info)
+        input_graph = normalize(np.array(X.numpy()[0, :, :]))
+        decoded_graph = normalize(np.array(decoded.numpy()[0, :, :]))
+        encoded_graph = normalize(np.array(encoded.numpy()[0, :, :]))
+
+        nan_padding = np.full((68, 64), np.nan) 
+        input_graph_padded = np.concatenate((nan_padding, input_graph, nan_padding), axis=1)
+        decoded_graph_padded = np.concatenate((nan_padding, decoded_graph, nan_padding), axis=1)
+        print(input_graph_padded.shape, encoded_graph.shape, decoded_graph_padded.shape)
+
+        fig, axs = plt.subplots(3, 1, figsize=(10, 12), gridspec_kw={'hspace': 0})
+        
+        for ax, data in zip(axs, [input_graph_padded, encoded_graph, decoded_graph_padded]):
+            sns.heatmap(data, ax=ax, cmap='viridis', cbar=False, vmin=0, vmax=1)
+            ax.set_xticks([])
+            ax.set_yticks([])
+            ax.set_aspect('equal')
+        fig.suptitle(f"Activations at Layer 2", fontsize=16)
+        fig.supxlabel("Dimension", fontsize=16)
+        fig.supylabel("Residue", fontsize=16)
+        plt.subplots_adjust(hspace=0)
+        plt.show()
+
+        '''
+        fig, axs = plt.subplots(3, 1, figsize=(10, 12), gridspec_kw={'height_ratios': [1, 1, 1]})
+
+        sns.heatmap(input_graph_padded, ax=axs[0], cmap='viridis', cbar=False, vmin=0, vmax=1)
+        axs[0].set_xticks([])
+        axs[0].set_yticks([])
+        axs[0].set_aspect('equal', 'box')
+
+        sns.heatmap(encoded_graph, ax=axs[1], cmap='viridis', cbar=False, vmin=0, vmax=1)
+        axs[1].set_xticks([])
+        axs[1].set_yticks([])
+        axs[1].set_aspect('equal', 'box')
+
+        sns.heatmap(decoded_graph_padded, ax=axs[2], cmap='viridis', cbar=False, vmin=0, vmax=1)
+        axs[2].set_xticks([])
+        axs[2].set_yticks([])
+        axs[2].set_aspect('equal', 'box')
+
+        plt.subplots_adjust(hspace=0)
+        plt.show()
+        '''
+        '''
+        print(encoded_graph.shape)
+        fig = plt.figure(layout='constrained')
+        gs = fig.add_gridspec(3, hspace=0)
+        axs = gs.subplots(sharex=True, sharey=True)
+        fig.suptitle('Activations at Layer 3')#, padding=0.3)
+        axs[0].imshow(input_graph)
+        axs[1].imshow(encoded_graph)
+        axs[2].imshow(decoded_graph)
+
+        # Hide x labels and tick labels for all but bottom plot.
+        for ax in axs:
+            ax.label_outer()
+
+        fig.supxlabel("Dimension")
+        fig.supylabel("Residue", x=0.0)
+        fig.get_layout_engine().set(h_pad=0.01, w_pad=0.01)
+        '''
+        plt.savefig(f"{graph_info[0]}_{graph_info[1]}_layer_3_{graph_info[2]}_combined.png", dpi=300)
+        plt.show()
         # Original Graph
-            '''
+        '''
             x= self.WS1.bias.data
             y = self.WS2.bias.data
             bins = np.linspace(-0.1, 0.1, 25)
@@ -777,7 +855,7 @@ class SAELayer(nn.Module):
             plt.show()
             plt.clf()
             '''
-
+        '''
             h_V_graph = np.array(X.numpy()[0, :, :])
             h_V_graph = normalize(h_V_graph)
             plt.figure()
@@ -823,7 +901,7 @@ class SAELayer(nn.Module):
             plt.title("Sparse Latent Space")
             plt.savefig("encoded.png")
             plt.show()
-
+            '''
         return encoded, decoded
 
 class DecLayer(nn.Module):
@@ -1210,7 +1288,7 @@ class ProteinMPNN(nn.Module):
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
 
-    def forward(self, X, S, mask, chain_M, residue_idx, chain_encoding_all, randn, show_graphs, return_log_probs, use_input_decoding_order=False, decoding_order=None, SAE_level='node'):
+    def forward(self, X, S, mask, chain_M, residue_idx, chain_encoding_all, randn, graph_info, return_log_probs, use_input_decoding_order=False, decoding_order=None, SAE_level='node'):
         """ Graph-conditioned sequence model """
         device=X.device
         # Prepare node and edge embeddings
@@ -1233,7 +1311,7 @@ class ProteinMPNN(nn.Module):
                 self.input_act.append(h_V)
         
         for idx, layer in enumerate(self.sae_layers):
-            encoded, decoded = layer(self.input_act[idx], show_graphs)
+            encoded, decoded = layer(self.input_act[idx], idx, graph_info)
             self.encoded_act.append(encoded)
             self.output_act.append(decoded)
         

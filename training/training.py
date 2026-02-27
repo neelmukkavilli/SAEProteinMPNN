@@ -89,7 +89,8 @@ def main(args):
                         num_decoder_layers=args.num_encoder_layers, 
                         k_neighbors=args.num_neighbors, 
                         dropout=args.dropout, 
-                        augment_eps=args.backbone_noise)
+                        augment_eps=args.backbone_noise,
+                        expansion=args.expansion)
     model.to(device)
     
     if PATH:
@@ -106,10 +107,10 @@ def main(args):
         total_step = 0
         reinit_steps = 0
         epoch = 0
-        activity_mask = torch.tensor(np.zeros((3, 1024)))
+        activity_mask = torch.tensor(np.zeros((3, 128*args.expansion)))
         reservoir_inputs = []
         reservoir_losses = []
-    activity_mask = torch.tensor(np.zeros((3, 1024)))
+    activity_mask = torch.tensor(np.zeros((3, 128*args.expansion)))
     '''
     check1path = "./exp_020/model_weights/lsample_e250_s500_2/epoch_last.pt"
     checkpoint1 = torch.load(check1path, map_location=device, weights_only=False)
@@ -150,7 +151,7 @@ def main(args):
             model.eval() # Now whole model is trained with model.eval()
             train_sum, train_weights = 0., 0.
             train_acc = 0.
-            epoch_activity_mask = torch.tensor(np.zeros((3, 1024))) # Which neurons are active in each epoch
+            epoch_activity_mask = torch.tensor(np.zeros((3, 128*args.expansion))) # Which neurons are active in each epoch
             if e % args.reload_data_every_n_epochs == 0:
                 if reload_c != 0:
                     train_pdbs_gen = get_pdbs(train_loader, max_length=args.max_protein_length)
@@ -180,7 +181,7 @@ def main(args):
                 log_probs, original, encoded, decoded = model(X, S, mask, chain_M, residue_idx, chain_encoding_all, args.SAE_level, args.reinsert_SAE)
                 
                 # Find active neurons
-                fired = torch.tensor(np.zeros((3, 1024)))
+                fired = torch.tensor(np.zeros((3, 128*args.expansion)))
                 for i in range(3):
                     if args.SAE_level == 'edge':
                         fired[i, :] = (model.encoded_act[i].abs().sum(dim=[0,1,2]) > 0).int().cpu() # Sum batches, samples, and neighbors -> [1024]
@@ -209,7 +210,7 @@ def main(args):
                 # Collect all inputs and losses for all batches in loader for at most 100 reinit steps
                 if args.reinit == "anthropic":
                     if reinit_steps > (reinit_every_n_steps - 100):
-                        reservoir_inputs, reservoir_losses = store_inputs_and_losses(count, reservoir_inputs, reservoir_losses, reservoir_size, original, encoded, decoded, mask, chain_M, sparse_weight)
+                        reservoir_inputs, reservoir_losses = store_inputs_and_losses(count, reservoir_inputs, reservoir_losses, reservoir_size, original, encoded, decoded, mask, chain_M, sparse_weight, args.expansion)
                 if reinit_steps > reinit_every_n_steps:
                     if args.reinit == "anthropic": # Anthropic reinitialization defined in X paper
                         with torch.no_grad():
@@ -346,6 +347,7 @@ if __name__ == "__main__":
     argparser.add_argument("--SAE_level", type=str, default='node', help='node or edge')
     argparser.add_argument("--reinsert_SAE", action="store_true", help="if the decoded embedding is fed back into the model")
     argparser.add_argument("--learning_rate", type=float, default=0.0001, help="range from 1e-2 to 1e-6")
+    argparser.add_argument("--expansion", type=int, default=8, help="Factor by which latent space increases")
     argparser.add_argument("--sparse_weight", type=float, default=1e-3, help='range from 10 to 1e-5')
     argparser.add_argument("--mse_weight", type=float, default=1.0, help='keep at 1.0 and change sparse_weight')
     argparser.add_argument("--reinit_every_n_steps", type=int, default=10000, help='for default at 10k, starts storing dead neurons for previous n/2 = 5k steps')

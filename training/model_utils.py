@@ -248,7 +248,7 @@ def remove_parallel_grads(weight):
         
 ## See Anthropic Neuron Resampling procedure in "Towards Monosemanticity..."
 # also see https://github.com/shehper/sparse-dictionary-learning/blob/main/autoencoder/autoencoder.py for code
-def store_inputs_and_losses(count, reservoir_inputs, reservoir_losses, reservoir_size, original, encoded, decoded, mask, chain_M, sparse_weight):
+def store_inputs_and_losses(count, reservoir_inputs, reservoir_losses, reservoir_size, original, encoded, decoded, mask, chain_M, sparse_weight, expansion):
     '''
     mask_for_loss = torch.reshape((mask * chain_M).detach().bool(), (-1, 1))
     # Package [B, L, D] or [B, L, K, D] -> [B*L, D] or [B*L*K, D]
@@ -261,7 +261,7 @@ def store_inputs_and_losses(count, reservoir_inputs, reservoir_losses, reservoir
     encoded = encoded.detach()
     output = decoded.detach()
     
-    batch_loss = per_sample_SAE_loss(input, encoded, output, sparse_weight, mask_for_loss)
+    batch_loss = per_sample_SAE_loss(input, encoded, output, sparse_weight, mask_for_loss, expansion)
 
     for i in range(batch_loss.shape[0]): # B*L or B*L*K
         count += 1
@@ -275,13 +275,13 @@ def store_inputs_and_losses(count, reservoir_inputs, reservoir_losses, reservoir
                 reservoir_losses[j] = batch_loss[i].cpu()
     return reservoir_inputs, reservoir_losses
 
-def per_sample_SAE_loss(input, encoded, output, sparse_weight, mask):
+def per_sample_SAE_loss(input, encoded, output, sparse_weight, mask, expansion):
     #mse_loss = torch.mean(torch.nn.functional.mse_loss(output, input, reduction='none')[mask.squeeze()], dim=1)#.detach()
     #sparse_loss = torch.mean(torch.abs(encoded)[mask.squeeze()], dim=1)#.detach()
 
     # Calculates loss of shape [B, L, K, D] -> mask applied -> Reshaped to [B*L*K, D] -> mean loss for each sample -> [B*L*K] 
     mse_loss = torch.mean(torch.reshape((torch.nn.functional.mse_loss(output, input, reduction='none')[mask]), (-1, 128)), dim=1)
-    sparse_loss = torch.mean(torch.reshape((torch.abs(encoded)[mask]), (-1, 1024)), dim=1)
+    sparse_loss = torch.mean(torch.reshape((torch.abs(encoded)[mask]), (-1, 128*expansion)), dim=1)
     return mse_loss + sparse_weight * sparse_loss
 
 def reinit_anthropic(model, optimizer, reservoir_inputs, reservoir_losses, alive_neurons, dead_neurons, device):
@@ -449,18 +449,18 @@ class EncLayer(nn.Module):
         return h_V, h_E#, original, encoded, decoded
 
 class SAELayer(nn.Module):
-    def __init__(self, num_in, expansion):
+    def __init__(self, num_in, expansion=8):
         super(SAELayer, self).__init__()
         self.num_hidden = num_in
         self.expansion = expansion
 
-        self.WS1 = nn.Linear(num_in, num_in*8, bias=True) # Dense encodings expanded by 8 times i.e. [B, L, 128] -> [B, L, 1024]
-        self.WS2 = nn.Linear(num_in*8, num_in, bias=True)
+        self.WS1 = nn.Linear(num_in, num_in*self.expansion, bias=True) # Dense encodings expanded by 8 times i.e. [B, L, 128] -> [B, L, 1024]
+        self.WS2 = nn.Linear(num_in*self.expansion, num_in, bias=True)
         self.act = nn.ReLU()
         nn.init.kaiming_uniform_(self.WS1.weight)
         nn.init.kaiming_uniform_(self.WS2.weight)
 
-        self.normalize_decoder()
+        #self.normalize_decoder()
 
     # Make sure decoder weights columns are unit norm, remove other gradients
     def normalize_decoder(self):
@@ -661,7 +661,7 @@ class ProteinMPNN(nn.Module):
         ])
 
         self.sae_layers = nn.ModuleList([
-            SAELayer(hidden_dim, hidden_dim*expansion)
+            SAELayer(hidden_dim, expansion)
             for _ in range(num_encoder_layers)
         ])
 
@@ -717,21 +717,15 @@ class ProteinMPNN(nn.Module):
             encoded, decoded = layer(self.input_act[idx])
             self.encoded_act.append(encoded)
             self.output_act.append(decoded)
-
-        #encoded, decoded = self.sae_layers[2](h_V)
-
         
         if reinsert_SAE == True:
             if SAE_level == 'node':
                 h_V = self.output_act[2]
             elif SAE_level == 'edge':
                 h_E = self.output_act[2]
-    
         
         if True: # Don't collect gradients for decoder
             # Concatenate sequence embeddings for autoregressive decoder
-        
-            h_V = decoded
 
             h_S = self.W_s(S)
             h_ES = cat_neighbors_nodes(h_S, h_E, E_idx)
@@ -759,10 +753,9 @@ class ProteinMPNN(nn.Module):
             logits = self.W_out(h_V)
             log_probs = F.log_softmax(logits, dim=-1)
 
-        
-        self.sae_grad_calc(log_probs, S, encoded, mask, chain_M)
+        #self.sae_grad_calc(log_probs, S, encoded, mask, chain_M)
             
-        return log_probs, self.input_act[2], self.encoded_act[2], self.output_act[2]#original, encoded, decoded
+        return log_probs, self.input_act[2], self.encoded_act[2], self.output_act[2]
         
 
 class NoamOpt:
