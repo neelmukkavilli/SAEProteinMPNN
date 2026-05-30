@@ -2,29 +2,14 @@ import argparse
 import os.path
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
-import gc
 import os
-import itertools
 from itertools import islice
 
 def main(args):
-    import json, time, os, sys, glob
-    import shutil
-    import warnings
+    import time, os
     import numpy as np
     import torch
-    from torch import optim
-    from torch.utils.data import DataLoader
-    import torch.distributed as dist
-    import queue
-    import copy
-    import torch.nn as nn
-    from torch.nn.parallel import DistributedDataParallel as DDP
-    import torch.nn.functional as F
-    import random
-    import os.path
-    import subprocess
-    from concurrent.futures import ProcessPoolExecutor    
+    import os.path   
     from utils import worker_init_fn, get_pdbs, loader_pdb, build_training_clusters, PDB_dataset, StructureDataset, StructureLoader
     from model_utils import featurize, loss_smoothed, loss_nll, SAE_loss, get_std_opt, ProteinMPNN, store_inputs_and_losses, reinit_anthropic, remove_parallel_grads, per_sample_SAE_loss, reinit_classic
 
@@ -92,46 +77,31 @@ def main(args):
                         augment_eps=args.backbone_noise,
                         expansion=args.expansion)
     model.to(device)
-    
+
     if PATH:
         checkpoint = torch.load(PATH)
-        total_step = checkpoint['step'] #write total_step from the checkpoint
-        epoch = checkpoint['epoch'] #write epoch from the checkpoint
+        total_step = checkpoint['step']
+        epoch = checkpoint['epoch']
         model.load_state_dict(checkpoint['model_state_dict'])
         reinit_steps = checkpoint['reinit_step']
         activity_mask = checkpoint['activity_mask']
         reservoir_inputs = checkpoint['reservoir_inputs']
         reservoir_losses = checkpoint['reservoir_losses'] 
     else:
-        model.load_state_dict(torch.load(base_folder + "v_48_020.pt", weights_only=False), strict=False)
+        model.load_state_dict(torch.load(base_folder + "v_48_020.pt", weights_only=False)['model_state_dict'], strict=False) # Load pre-trained weights
         total_step = 0
         reinit_steps = 0
         epoch = 0
         activity_mask = torch.tensor(np.zeros((3, 128*args.expansion)))
         reservoir_inputs = []
         reservoir_losses = []
-    activity_mask = torch.tensor(np.zeros((3, 128*args.expansion)))
-    '''
-    check1path = "./exp_020/model_weights/lsample_e250_s500_2/epoch_last.pt"
-    checkpoint1 = torch.load(check1path, map_location=device, weights_only=False)
-    desired_keys = ['encoder_layers.0.WS1.weight', 'encoder_layers.0.WS1.bias', 'encoder_layers.0.WS2.weight', 'encoder_layers.0.WS2.bias',
-    'encoder_layers.1.WS1.weight', 'encoder_layers.1.WS1.bias', 'encoder_layers.1.WS2.weight', 'encoder_layers.1.WS2.bias',
-    'encoder_layers.2.WS1.weight', 'encoder_layers.2.WS1.bias', 'encoder_layers.2.WS2.weight', 'encoder_layers.2.WS2.bias']
-    filtered_state_dict = {}
-    for k, v in checkpoint1['model_state_dict'].items():
-        if k in desired_keys:
-            k = k[15:]
-            filtered_state_dict[k] = v
-    
-    model.sae_layers.load_state_dict(filtered_state_dict)
-    '''
+
     optimizer = torch.optim.Adam([
         {"params": [param for name, param in model.sae_layers.named_parameters() if "0.W" in name]},
         {"params": [param for name, param in model.sae_layers.named_parameters() if "1.W" in name]},
         {"params": [param for name, param in model.sae_layers.named_parameters() if "2.W" in name]},
     ], args.learning_rate)
     
-
     if True:
         print("Parsing proteins")
         train_pdbs_gen = get_pdbs(train_loader, max_length=args.max_protein_length)
@@ -164,16 +134,14 @@ def main(args):
                 reload_c += 1
             # Used to collect info for reinitialization
             if args.SAE_level == 'edge':
-                reservoir_size = args.reservoir_size #* 48 # Edges have 48 times more inputs/losses, size automatically multiplied for consistency
+                reservoir_size = args.reservoir_size #* 48 # Edges have 48 times more samples, size automatically multiplied for consistency
             else:
                 reservoir_size = args.reservoir_size
             
             train_sparse_loss, train_mse_loss, train_specificity = 0, 0 ,0
             for batch_idx, batch in enumerate(loader_train):
                 count = 0
-                start_batch = time.time()
                 X, S, mask, lengths, chain_M, residue_idx, mask_self, chain_encoding_all = featurize(batch, device)
-                elapsed_featurize = time.time() - start_batch
 
                 optimizer.zero_grad()
                 mask_for_loss = mask*chain_M
@@ -216,7 +184,7 @@ def main(args):
                         with torch.no_grad():
                             dead_neurons = (activity_mask == 0).nonzero(as_tuple=True)[0]
                             alive_neurons = (activity_mask > 0).nonzero(as_tuple=True)[0]
-                            #per_epoch_dead_neurons = (epoch_activity_mask == 0).nonzero(as_tuple=True)[0]
+                            per_epoch_dead_neurons = (epoch_activity_mask == 0).nonzero(as_tuple=True)[0]
                             print(f"Number of dead neurons: {len(dead_neurons)}")
                             if len(dead_neurons) > 0:
                                 print(f'L2 norm before reinitialization {torch.linalg.vector_norm(model.sae_layers[2].WS1.weight[dead_neurons], dim=1).mean().item()}')
@@ -247,10 +215,10 @@ def main(args):
                             count = 0
             
                 # Calculate training loss
-                #loss, loss_av, true_false = loss_nll(S, log_probs, mask_for_loss)
-                #train_sum += torch.sum(loss * mask_for_loss).cpu().data.numpy()
-                #train_acc += torch.sum(true_false * mask_for_loss).cpu().data.numpy()
-                #train_weights += torch.sum(mask_for_loss).cpu().data.numpy()
+                loss, loss_av, true_false = loss_nll(S, log_probs, mask_for_loss)
+                train_sum += torch.sum(loss * mask_for_loss).cpu().data.numpy()
+                train_acc += torch.sum(true_false * mask_for_loss).cpu().data.numpy()
+                train_weights += torch.sum(mask_for_loss).cpu().data.numpy()
 
             model.eval()
             print("Reinit steps:", reinit_steps)
@@ -262,7 +230,7 @@ def main(args):
                     X, S, mask, lengths, chain_M, residue_idx, mask_self, chain_encoding_all = featurize(batch, device)
                     log_probs, original, encoded, decoded = model(X, S, mask, chain_M, residue_idx, chain_encoding_all, args.SAE_level, args.reinsert_SAE)
                     
-                    # specificity is the average % of samples a neuron will activate for (# of samples > 0 / # of samples)
+                    # Specificity is the average % of samples a neuron will activate for (# of samples > 0 / # of samples)
                     for i in range(3):
                         valid_specificity[i] += (torch.mean((model.encoded_act[i] > 0).float()) / len(loader_valid)).cpu().data.numpy()
 
@@ -275,6 +243,7 @@ def main(args):
                     validation_weights += torch.sum(mask_for_loss).cpu().data.numpy()
                     valid_sparse_loss += (torch.sum(sparse_loss * mask_for_loss).cpu().data.numpy() / len(loader_valid))
                     valid_mse_loss += (torch.sum(mse_loss * mask_for_loss).cpu().data.numpy() / len(loader_valid))
+                    validation_accuracy = validation_acc / validation_weights
                     #validation_norm_loss += torch.sum(loss_av_smoothed * mask_for_loss).cpu().data.numpy()
             
                 '''
@@ -293,6 +262,7 @@ def main(args):
                 norm_loss_ = np.format_float_positional(np.float32(validation_norm_loss), unique=False, precision=3)
                 '''
 
+            validation_accuracy_ = np.format_float_positional(np.float32(validation_accuracy), unique=False, precision=3)
             train_specificity_ = np.format_float_positional(np.float32(train_specificity.item()), unique=False, precision=3)
             train_sparse_loss_ = np.format_float_positional(np.float32(train_sparse_loss), unique=False, precision=3)
             train_mse_loss_ = np.format_float_positional(np.float32(train_mse_loss), unique=False, precision=3)
@@ -305,8 +275,8 @@ def main(args):
             t1 = time.time()
             dt = np.format_float_positional(np.float32(t1-t0), unique=False, precision=1) 
             with open(logfile, 'a') as f:
-                f.write(f'epoch: {e+1}, time: {dt}, train sparse loss: {train_sparse_loss_}, train mse loss: {train_mse_loss_}, train spec: {train_specificity_}, valid sparse loss: {valid_sparse_loss_}, valid mse loss: {valid_mse_loss_}, valid spec: {valid_specificity_}, dead: {dead_neurons}, dead per epoch: {per_epoch_dead_neurons}\n')#, valid_acc: {validation_accuracy_}\n')
-            print(f'epoch: {e+1}, time: {dt}, train sparse loss: {train_sparse_loss_}, train mse loss: {train_mse_loss_}, train spec {train_specificity_}, valid sparse loss: {valid_sparse_loss_}, valid mse loss: {valid_mse_loss_}, valid spec: {valid_specificity_}, dead: {dead_neurons}, dead per epoch: {per_epoch_dead_neurons}')#, valid_acc: {validation_accuracy_}')
+                f.write(f'epoch: {e+1}, time: {dt}, train sparse loss: {train_sparse_loss_}, train mse loss: {train_mse_loss_}, train spec: {train_specificity_}, valid sparse loss: {valid_sparse_loss_}, valid mse loss: {valid_mse_loss_}, valid acc: {validation_accuracy_}, dead: {dead_neurons}, dead per epoch: {per_epoch_dead_neurons}\n')#, valid_acc: {validation_accuracy_}\n')
+            print(f'epoch: {e+1}, time: {dt}, train sparse loss: {train_sparse_loss_}, train mse loss: {train_mse_loss_}, train spec {train_specificity_}, valid sparse loss: {valid_sparse_loss_}, valid mse loss: {valid_mse_loss_}, valid acc: {validation_accuracy_}, dead: {dead_neurons}, dead per epoch: {per_epoch_dead_neurons}')#, valid_acc: {validation_accuracy_}')
             checkpoint_filename_last = base_folder+'model_weights/epoch_last.pt'.format(e+1, total_step)
             if args.reinit == 'anthropic':
                 print("Len of res inputs:", len(reservoir_inputs))

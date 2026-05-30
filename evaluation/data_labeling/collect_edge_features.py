@@ -1,18 +1,14 @@
-import MDAnalysis
 import numpy as np
-from MDAnalysis.analysis.hydrogenbonds.hbond_analysis import HydrogenBondAnalysis as HBA
-from pdbfixer import PDBFixer
-from openmm.app import PDBFile
-from MDAnalysis.analysis import contacts
-from protein_mpnn_utils_eval import _scores, _S_to_seq, tied_featurize, parse_PDB, parse_fasta, create_labels
-from protein_mpnn_utils_eval import StructureDataset, StructureDatasetPDB, ProteinMPNN
-import os
-import sys
+from protein_mpnn_utils_eval import tied_featurize, parse_PDB
+from protein_mpnn_utils_eval import StructureDatasetPDB
 from pathlib import Path
 import torch
 import copy
 import pandas as pd
 from natsort import natsorted
+import pickle
+
+output = "test_edge_features.pkl"
 
 df_distance_bins = pd.DataFrame()
 df_contact_order = pd.DataFrame()
@@ -134,7 +130,7 @@ def run_distance_collection(pdb_path):
     
     return pd.concat([label_df, df_distance_bins, df_contact_order, df_contact_type], axis=1).iloc[mask, :]
 
-input_pdb_dir = Path('/WAVE/bio/ML/SAE_train/SAEProteinMPNN/sae_training/evaluation/inputs')
+input_pdb_dir = Path('/WAVE/bio/ML/SAE_train/SAEProteinMPNN/evaluation/inputs')
 
 df = pd.DataFrame()
 
@@ -146,9 +142,9 @@ for pdb_file in pdb_files:
     print(pdb_file.name)
     data = run_distance_collection(pdb_file)
     np.random.seed(0)
-    mask = np.random.rand(data.shape[0]) < 1/48
-    data = data.iloc[mask, :]
     df = pd.concat([df, data], axis=0)
 
-df.to_csv("test_edge_features.csv", index=False)
+with open(output, 'ab') as f:
+    pickle.dump(df, f)
+#f.to_csv("test_edge_features.csv", index=False)
 print(f"✅ Edge data saved to edge_features.csv with {len(df)} rows.")

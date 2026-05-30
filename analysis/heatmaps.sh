@@ -1,5 +1,5 @@
 
-path_to_PDB="../evaluation/inputs/1a7w.pdb"
+path_to_PDB="../evaluation/inputs/1b0x.pdb"
 
 output_dir="outputs/training_test_output"
 if [ ! -d $output_dir ]
@@ -10,8 +10,8 @@ fi
 chains_to_design=""
 
 python ../evaluation/protein_mpnn_eval.py \
-        --path_to_model_weights "../training/exp_020/model_weights/bps_final_models/slow_exp_2_s0001" \
-        --model_name "epoch50" \
+        --path_to_model_weights "../training/exp_020/model_weights/node_log17_KI" \
+        --model_name "epoch150" \
         --SAE_level "node" \
         --show_graphs \
         --pdb_path $path_to_PDB \

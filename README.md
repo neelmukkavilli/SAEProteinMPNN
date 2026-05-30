@@ -1,6 +1,6 @@
 # SAEProteinMPNN
 
-![Sparse Autoencoder graphic showing heatmaps of original, encoded, and decoded latent spaces](/analysis/graphics/SAE_graphic.png)
+![Sparse Autoencoder graphic showing heatmaps of original, encoded, and decoded latent spaces](/analysis/SAE_graphic.png)
 
 ## Organization:
 
@@ -42,7 +42,7 @@ Sparse Loss = $\sum_{i}^{k}\left|z_i \right|$
 
 ProteinMPNN is a message passing graphical neural network. The graph consists of vectors storing information of nodes (residues) and edges (connections between residues). Information from the edges is consolidated into a "message", passed through three MLP layers, and used to update the nodes. Information from nodes similarly updates the edges. There are three rounds of message passing and after each round, the information is said to be stored in a "latent space" These are the dense inputs used for the SAE layers placed after each round of encodings.
 
-![ProteinMPNN encoding scheme for node and edge activations](/analysis/graphics/ProtMPNN_graphic.png)
+![ProteinMPNN encoding scheme for node and edge activations](/analysis/ProtMPNN_graphic.png)
 
 The outputs of the SAE (the decoded dense activations) are not fed back into the model except if 'args.reinsert_SAE == True', in which case the last SAE's output is used as the input for the ProteinMPNN decoder.
 

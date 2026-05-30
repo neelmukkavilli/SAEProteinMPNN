@@ -21,6 +21,7 @@ def main(args):
     import matplotlib.pyplot as plt
     from protein_mpnn_utils import loss_nll, loss_smoothed, gather_edges, gather_nodes, gather_nodes_t, cat_neighbors_nodes, _scores, _S_to_seq, tied_featurize, parse_PDB, parse_fasta, create_labels
     from protein_mpnn_utils import StructureDataset, StructureDatasetPDB, ProteinMPNN
+    #import h5py
     if args.seed:
         seed=args.seed
     else:
@@ -258,6 +259,7 @@ def main(args):
     for i in range(3):
         csv_outputs.append(f'created_data/encodings/output_' + args.csv_output + '_' + str(i) + '.pkl')
 
+
     # Timing
     start_time = time.time()
     total_residues = 0
@@ -361,40 +363,49 @@ def main(args):
                             #write_header = os.path.getsize(csv_outputs[i]) == 0
                             with open(csv_outputs[i], "ab") as f:
                                 pickle.dump(encoded_df, f)
-                            #encoded_df.to_pickle(csv_outputs[i], mode='a', header = True, index=False)
-                            #encoded_df.to_csv(csv_outputs[i], mode='a', header = write_header, index=False)
-
-                        #print("Saving graphs")
-                        #for i in range(3):
-                            #mask_for_empty = np.asarray((S[0] != 20).cpu())
-                            #encoded_ = np.round(model.encoded_act[i].cpu().numpy()[0,:,:128], decimals=5)[mask_for_empty]
-                            #input_ = np.round(model.input_act[i].cpu().numpy()[0,:,:128], decimals=5)[mask_for_empty]
-                            #decoded_ = np.round(model.output_act[i].cpu().numpy()[0,:,:128], decimals=5)[mask_for_empty]
-                            #plt.imshow(encoded_, aspect='auto')
-                            #plt.savefig(f'{model_name}_{protein_name}_layer_{i}_node_encoded.png', dpi=300)
-                            #plt.imshow(input_, aspect='auto')
-                            #plt.savefig(f'{model_name}_{protein_name}_layer_{i}_node_input.png', dpi=300)
-                            #plt.imshow(decoded_, aspect='auto')
-                            #plt.savefig(f'{model_name}_{protein_name}_layer_{i}_node_decoded.png', dpi=300)
                 else:
                     print("Error was had")
                     print(args.pdb_path)
             elif args.SAE_level == 'edge' and args.return_log_probs != True:
                 randn_1 = torch.randn(chain_M.shape, device=X.device)
-                h_V, h_E, original, encoded, decoded, E_idx = model(X, S, mask, chain_M*chain_M_pos, residue_idx, chain_encoding_all, randn_1, show_graphs=args.show_graphs, SAE_level=args.SAE_level)
+                h_V, h_E, original, encoded, decoded, E_idx = model(X, S, mask, chain_M*chain_M_pos, residue_idx, chain_encoding_all, randn_1, None, return_log_probs=False, SAE_level=args.SAE_level)
                 name = args.pdb_path[-8:-4]
                 labels = []
+                #print(E_idx.shape)
                 for i in range(E_idx.shape[1]):
                     for j in range(E_idx.shape[2]):
                         labels.append(f'{name}_{E_idx[0,i,0]}-{E_idx[0,i,j]}')
+                mask_for_empty = (S[0] != 20).cpu()
+                labels = np.asarray(labels).reshape(-1, 48)[mask_for_empty, :]
                 for i in range(3):
+                    encoded = np.round(model.encoded_act[i].cpu().numpy()[0, mask_for_empty, :, :], decimals = 5)
+                    encoded = encoded.reshape(-1, 48, model.encoded_act[i].shape[3])
+                    mask = np.random.rand(encoded.shape[0]) < 1/48
+                    encoded = encoded[mask, :, :]
+                    labels_ = labels[mask, :]
+                    data = {"encoded": encoded,
+                            "labels": labels_}
+                    with open(csv_outputs[i], "ab") as f:
+                        pickle.dump(data, f)
+                    
+                    '''
+                    with h5py.File(csv_outputs[i], "a") as f:
+                        dset_enc = f["encoded"]
+                        dset_lab = f["labels"]
+                        n_old = dset_enc.shape[0]
+                        n_new = n_old + encoded.shape[0]
+                        dset_enc.resize(n_new, axis=0)
+                        dset_lab.resize(n_new, axis=0)
+                        dset_enc[n_old:n_new] = encoded
+                        dset_lab[n_old:n_new] = labels
                     mask_for_empty = np.asarray((S[0] != 20).cpu())
                     encoded_ = np.round(model.encoded_act[i].cpu().numpy()[0,:,:,:], decimals=5)
-                    encoded = np.reshape(np.round(model.encoded_act[i].cpu().numpy()[0,mask_for_empty.squeeze(0),:,:], decimals=5), (-1, model.encoded_act[i].shape[3]))
+                    encoded = np.reshape(np.round(model.encoded_act[i].cpu().numpy()[0,mask_for_empty,:,:], decimals=5), (-1, 48, model.encoded_act[i].shape[3]))
                     label_df = pd.DataFrame(labels, columns=['identifier'])
                     encoded_df = pd.DataFrame(encoded, columns = range(1, (128*size + 1)))
                     encoded_df = pd.concat([label_df, encoded_df], axis = 1)
-                    mask = pd.DataFrame(np.random.rand(encoded_df.shape[0]) < 1/48) # Only return ~2% of the data to avoid huge files
+                    print(encoded_df.shape)
+                    mask = pd.DataFrame(np.random.rand(encoded_df.shape[0]) < 2) # Only return ~2% of the data to avoid huge files
                     encoded_df = encoded_df[mask[0]]
                     if not os.path.exists(csv_outputs[i]):
                         with open(csv_outputs[i], "w") as f:
@@ -405,6 +416,7 @@ def main(args):
                             pickle.dump(encoded_df, f)
                         #write_header = os.path.getsize(csv_outputs[i]) == 0
                         #encoded_df.to_csv(csv_outputs[i], mode='a', header = write_header, index=False)   
+                    '''
             elif args.return_log_probs:
                 error, res_labels = create_labels(args.pdb_path, args.SAE_level)
                 if error != True:
@@ -426,12 +438,15 @@ def main(args):
                     randn_1 = torch.randn(chain_M.shape, device=X.device)
                     h_V, h_E, original, encoded, decoded, E_idx = model(X, S, mask, chain_M*chain_M_pos, residue_idx, chain_encoding_all, randn_1, SAE_level=args.SAE_level)
                     mask_for_empty = np.asarray(S[0] != 20)
-                    encoded_ = np.round(encoded.numpy()[0,:,:], decimals=5)[mask_for_empty]
-                    res_df = pd.DataFrame(res_labels, columns = ['identifier'])
-                    encoded_df = pd.DataFrame(encoded_, columns = range(1, 129))
-                    encoded_df = pd.concat([res_df, encoded_df], axis=1)
-                    write_header = os.path.getsize(csv_output) == 0 
-                    encoded_df.to_csv(csv_output, mode='a', header = write_header, index=False)
+                    for i in range(3):
+                        original_ = np.round(model.input_act[i].cpu().numpy()[0,:,:], decimals=5)[mask_for_empty]
+                        res_df = pd.DataFrame(res_labels, columns = ['identifier'])
+                        original_df = pd.DataFrame(original_, columns = range(1, 129))
+                        original_df = pd.concat([res_df, original_df], axis=1)
+                        #write_header = os.path.getsize(csv_output) == 0 
+                        with open(csv_outputs[i], "ab") as f:
+                            pickle.dump(original_df, f)
+                        #encoded_df.to_csv(csv_output, mode='a', header = write_header, index=False)
                 else:
                     print("Error was had")
                     print(args.pdb_path)

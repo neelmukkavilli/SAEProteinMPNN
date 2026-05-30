@@ -7,11 +7,12 @@ from sklearn.metrics import average_precision_score
 from sklearn.metrics import matthews_corrcoef
 from sklearn.feature_selection import mutual_info_regression, mutual_info_classif
 import matplotlib.pyplot as plt
-#import polars as pl
+import polars as pl
 from sklearn import metrics
 import pickle
+#import polars as pl
 
-model = 'slow_exp2_se4_2'  # Change this to the desired model name
+model = 'node_log18_0'  # Change this to the desired model name
 
 # Load feature data and encodings
 dssp_path = '/WAVE/bio/ML/SAE_train/SAEProteinMPNN/evaluation/created_data/features/node_features.csv'
@@ -56,6 +57,7 @@ mask = np.random.rand(encodings.shape[0]) < 0.01
 encodings = encodings.iloc[mask, :]
 dssp = dssp.iloc[mask, :]
 res_labels = res_labels.iloc[mask]
+print(res_labels.shape)
 '''
 # ROC AUC Thresh = 0.7
 # Pearson Thresh = 0.5
@@ -84,7 +86,7 @@ res_labels = res_labels.iloc[mask]
 # DSSP
 # -: 9, E: 66, G: 5, H: 46, I: 4, S: 6, T: 43, function: 54, shape: 17, ASA: 63, phi: 11, psi: 2, 2: 1, 3: 13, 5: 8, 6: 2, 
 '''
-alphabet = list('ACDEFGHIKLMNPQRSTVWYX')  # Standard amino acids
+alphabet = list('ACDEFGHIKLMNPQRSTVWY')  # Standard amino acids
 # Anova test, not used in favor of F1 scores
 def ANOVA(feature_act, encodings, aa, neuron):
 
@@ -111,15 +113,15 @@ def safe_pearsonr(dssp, encodings, feat, dim):
         return 0
 
     r, p = sci.pearsonr(x, y)
-    if r > 0.5 or r < -0.5:
-        print(r, p, dim, feat)
+    if r > 0.75 or r < -0.75:
+        print(r, dim, feat)
         return 1
     else:
         return 0
 
 def mi_class(dssp, encodings, feat, dim):
-    x = dssp.to_numpy().reshape(-1, 1)
-    y = encodings.to_numpy()
+    y = dssp.to_numpy()
+    x = encodings.to_numpy().reshape(-1, 1)
 
     #mask = np.isfinite(x) & np.isfinite(y)
     #x = x[mask]
@@ -131,7 +133,7 @@ def mi_class(dssp, encodings, feat, dim):
     #    return 0
     
     mi = mutual_info_classif(x, y)
-    if mi > 0.3:
+    if mi > 0.2:
         print(mi, dim)
         return 1
     else:
@@ -139,21 +141,21 @@ def mi_class(dssp, encodings, feat, dim):
         return 0
 
 def mi_regress(dssp, encodings, feat, dim):
-    x = dssp.to_numpy()
-    y = encodings.to_numpy().reshape(-1, 1)
+    y = dssp.to_numpy()
+    x = encodings.to_numpy().reshape(-1, 1)
 
-    mask = np.isfinite(x) & np.isfinite(y)
-    x = x[mask]
-    y = y[mask]
+    #mask = np.isfinite(x) & np.isfinite(y)
+    #x = x[mask]
+    #y = y[mask]
 
     if np.sum(x) == 0 or np.sum(y) == 0:
         return 0
-    if np.std(x) == 0 or np.std(y) == 0:
+    #if np.std(x) == 0 or np.std(y) == 0:
         return 0
     
     mi = mutual_info_regression(x, y)
-    if mi > 0.3:
-        print(feat, dim)
+    if mi > 0.2:
+        print(mi, feat, dim)
         return 1
     else:
         return 0    
@@ -213,7 +215,7 @@ def eval_threshold(encodings_filtered, feature_act, feature, aa, score_csv=None,
                 else:
                     score_csv.loc[str(neuron), aa] = max#aps_score
 
-def eval_roc_auc(activations, feature_act, feature, dim, thresh=0.7, reverse=False, print_always=False, recorddims=set()):
+def eval_roc_auc(activations, feature_act, feature, dim, thresh=0.75, graph=False):
     # Ensure equal number of true postitives/negatives
     pos_idx = pd.Series(feature_act[feature_act == True].index.tolist())
     neg_idx = pd.Series(feature_act[feature_act == 0].index.tolist())
@@ -226,19 +228,27 @@ def eval_roc_auc(activations, feature_act, feature, dim, thresh=0.7, reverse=Fal
 
         feature_act = feature_act.loc[balanced_idx]
         activations = activations.loc[balanced_idx]
-        #print(feature_act[:10])
-        #print(feature_act[-10:])
-        #print(activations[:10])
         score = round(sklearn.metrics.roc_auc_score(feature_act, activations), 3)
         if score > thresh or score < (1-thresh):
             #print(score, dim, feature)
-            if print_always:
+            print(feature, dim, score)
+            if graph == False:
                 #print(len(pos_idx), len(neg_idx))
                 return 1
-                #print(score, dim, feature)
                 #return 1
             else:
-                return 1
+                fpr, tpr, _ = sklearn.metrics.roc_curve(feature_act, activations)
+                roc_auc = sklearn.metrics.auc(fpr, tpr)
+
+                # Plot ROC
+                plt.plot(fpr, tpr, label=f'ROC (AUC = {roc_auc:.2f})')
+                plt.plot([0, 1], [0, 1], 'k--') # Baseline
+                plt.xlabel('False Positive Rate')
+                plt.ylabel('True Positive Rate')
+                plt.title(f'ROC AUC Curve for Presence of Beta Sheet: Dim {dim}')
+                plt.legend(loc='upper left')
+                plt.savefig(f'{model}_roc_auc_{dim}.png')
+                plt.show()
                 #recorddims.add(dim)
                 #return 1
         else:
@@ -252,7 +262,7 @@ def eval_roc_auc(activations, feature_act, feature, dim, thresh=0.7, reverse=Fal
             #if print_always:
             #    print(score, dim, feature, "reversed")                
     else:
-        print(n, feature, dim)
+        #print(n, feature, dim)
         return 0
 
 def uniprot_cat(uniprot_features, n):
@@ -265,7 +275,7 @@ def uniprot_cat(uniprot_features, n):
 #print(sum(int(dssp[dssp['Chain val'] != "True"])))
 
 #interesting_dims = set()
-
+'''
 interesting_dims = [1, 16, 21, 22, 23, 536, 24, 35, 549, 43, 58, 59, 60, 574, 64, 
 67, 595, 85, 90, 98, 610, 613, 619, 620, 115, 631, 121, 636, 637, 129, 641, 644, 
 648, 137, 142, 661, 149, 156, 672, 165, 679, 684, 175, 689, 177, 183, 185, 697, 
@@ -276,6 +286,7 @@ interesting_dims = [1, 16, 21, 22, 23, 536, 24, 35, 549, 43, 58, 59, 60, 574, 64
 413, 927, 934, 423, 937, 428, 433, 956, 961, 964, 453, 455, 971, 974, 466, 986, 
 474, 479, 482, 504, 1002, 491, 490, 1008, 501, 1014, 1016, 505, 507, 508, 511]
 
+
 features = ['Beta strand val', 'Helix val', 'Disulfide bond val', 'Turn val', 'Glycosylation val', 'Transmembrane val', 'Zinc finger val', 
             'Coiled coil val', 'Cross-link val', 'Peptide val', 'Signal val']
 
@@ -283,7 +294,7 @@ keep_these_dims = set()
 ndims = encodings.shape[-1]
 #for idx, feat in enumerate(dssp.columns):
 #    if idx%2 == 1:
-'''
+
 for dim in sorted(interesting_dims):
     features_corr = [dim]
     for feat in features:
@@ -299,7 +310,7 @@ secondary_structures = ss_one_hot.columns
 
 aa_one_hot = pd.get_dummies(dssp['residue'])
 
-dims = [648, 637, 345, 482, 859, 937]
+#dims = [648, 637, 345, 482, 859, 937]
 #for dim in dims:
 #    activation = encodings.iloc[:, dim]
 #    #for ss in secondary_structures:
@@ -307,6 +318,7 @@ dims = [648, 637, 345, 482, 859, 937]
 #    for aa in ['I', 'V', 'L', 'G', 'P']:#aa_one_hot.columns:
 #        print(eval_roc_auc(activation, aa_one_hot[aa], aa, dim), dim, aa)
 
+testing_dims = [7]
 '''
 testing_dims = [374]
 
@@ -330,32 +342,39 @@ plt.title("Dimension 375 AUC For not Alpha Helix")
 plt.show()
 plt.savefig("roc display beta bridge")
 '''
+# model node 17_0,
+# H 7: 0.059
+# E 183: 0.921
+
+eval_roc_auc(encodings.iloc[:, 183], ss_one_hot['E'], 'E', 183, 0.75, True)
+
+
 '''
 for dim in testing_dims:
     activation = encodings.iloc[:, dim]
-    yes_B = dssp['sec_struct'] == 'E'
+    yes_B = dssp['sec_struct'] == 'H'
     yes_B_act = activation[yes_B]
-    no_B = 1 - yes_B
+    no_B = ~yes_B
     no_B_act = activation[no_B]
 
     fig, axs = plt.subplots()
 
     data = [yes_B_act, no_B_act]
-    label = ["Beta Strand", "Not in a Beta Strand"]
+    label = ["Alpha Helix", "No Alpha Helix"]
     axs.hist(data, density=True, label=label, bins=10)
     plt.legend()
-    plt.title("Activations for Dimension 375")
+    plt.title(f"Activations for Dimension {dim}")
     plt.ylabel("Frequency")
     plt.xlabel("Activation Value")
+    plt.savefig(f"{model}_histograms{dim}")
     plt.show()
-    plt.savefig(f"histograms{dim}")
 
     fig, axs = plt.subplots()
     axs.boxplot(data, tick_labels=label, showfliers=False)
-    plt.title("Activations for Dimension 375")
+    plt.title(f"Activations for Dimension {dim}")
     plt.ylabel("Activation Value")
+    plt.savefig(f"{model}_boxplots_{dim}")
     plt.show()
-    plt.savefig(f"boxplots{dim}")
 '''
 '''
 ## normalized_encodings_newlsamples500_2, thresh auc = +-0.5, r = +-0.7
@@ -395,24 +414,33 @@ significant_features = []
 #print(counter_ss)
 #print(counter_aa)
 
-
+#for aa in alphabet:
+#    features = aa_one_hot[aa]
+#    for dim in range(n_dims):
+#        activation = encodings.iloc[:, dim]
+#        counter += eval_roc_auc(activation, features, aa, dim)
+#    significant_features.append(aa)
+#    num_dims_significant.append(counter)
+#    counter = 0
 '''
 for ss in secondary_structures:
     for dim in range(n_dims):
         activation = encodings.iloc[:, dim]
         counter += eval_roc_auc(activation, ss_one_hot[ss], ss, dim)
-        #counter += mi_class(activation, ss_one_hot[ss], ss, dim)
+        #counter += mi_class(ss_one_hot[ss], activation, ss, dim)
     print(ss)
     print(counter)
     significant_features.append(ss)
     num_dims_significant.append(counter)
     counter = 0
+'''
+'''
 for group in cat_dict['function'].keys():
     feature_act = aa_one_hot[cat_dict['function'][group]].any(axis='columns').astype(int)
     for dim in range(n_dims):
         activation = encodings.iloc[:, dim]
         counter += eval_roc_auc(activation, feature_act, group, dim)
-        #counter += mi_class(activation, feature_act, group, dim)
+        #counter += mi_class(feature_act, activation, group, dim)
 print("function")
 print(counter)
 significant_features.append('AA chemistry')
@@ -422,7 +450,7 @@ for group in cat_dict['shape'].keys():
     feature_act = aa_one_hot[cat_dict['shape'][group]].any(axis='columns').astype(int)
     for dim in range(n_dims):
         activation = encodings.iloc[:, dim]
-        #counter += mi_class(activation, feature_act, group, dim)
+        #counter += mi_class(feature_act, activation, group, dim)
         counter += eval_roc_auc(activation, feature_act, group, dim)
 print("shape")
 print(counter)
@@ -434,40 +462,37 @@ for feat in dssp.columns[3:]:
     for dim in range(n_dims):
         activation = encodings.iloc[:, dim]
         counter += safe_pearsonr(activation, feature_act, feat, dim)
-        #counter += mi_regress(activation, feature_act, feat, dim)
+        #counter += mi_regress(feature_act, activation, feat, dim)
     print(feat)
     print(counter)
     significant_features.append(feat)
     num_dims_significant.append(counter)
     counter = 0
 '''
-feat = 'ASA'
-feature_act = dssp[feat]
 '''
-for dim in range(n_dims):
-    activation = encodings.iloc[:, dim]
-    safe_pearsonr(activation, feature_act, feat, dim)
-'''
-dims = [252]
-rscore = [0.7882527056]
-for idx, dim in enumerate(dims):
+feat = 'psi'
+feature_act = dssp['psi']#ss_one_hot['H']
+print_dims = [6, 28, 111, 160, 213]
+for dim in print_dims:
     activation = encodings.iloc[:, dim]
     ax = plt.scatter(activation, feature_act)
     plt.xlabel('Sparse Activation')
     #plt.xlim(0, 1)
     #plt.ylim(0, 1)
-    plt.ylabel('ASA')
-    plt.title(f'ASA correlation for Dimension {dim} with r = {round(rscore[idx], 3)}')#) {:.3f}'.format(rscore[idx]))
+    plt.ylabel(f'{feat}')
+    plt.title(f'Feature {feat} correlation for Dimension {dim}')#) {:.3f}'.format(rscore[idx]))
     #plt.annotate("r\u00B2 = {:.3f}".format(rscore[idx]), (0, 1))
-    plt.savefig("scatterplot.png", dpi=500)
+    plt.savefig(f"{dim}_{feat}_{model}scatterplot.png", dpi=500)
     plt.show()
-
-#bar_heights = [7, 6, 81, 9, 48, 0, 8, 44, 55, 11, 65, 9, 9, 0, 0, 0, 0, 0, 0, 0, 0, 1, 7, 26, 0, 9, 3, 0, 0, 0, 0]
-#bar_labels = ['No Structure', 'Beta bridge', 'Beta strand', '3-10 helix', 'Alpha helix', 'Pi helix', 'Bend', 'Turn', 
-#            'AA chemistry', 'AA shape', 'Surface area', 'Phi angle', 'Psi angle', 'Bfactor',
-#            'xy', 'xz', 'yz', 'Hydrophobic', 'Hydrophilic', 'Salt bridge', 
-#            '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10']
 '''
+#bar_heights = [7, 6, 81, 9, 48, 0, 8, 44, 55, 11, 65, 9, 9, 0, 0, 0, 0, 0, 0, 0, 0, 1, 7, 26, 0, 9, 3, 0, 0, 0, 0]
+bar_labels = ['No Structure', 'Beta bridge', 'Beta strand', '3-10 helix', 'Alpha helix', 'Pi helix', 'Bend', 'Turn', 
+            'AA chemistry', 'AA shape', 
+            'Surface area', 'Phi angle', 'Psi angle', 'Bfactor',
+            'xy', 'xz', 'yz', 'Hydrophobic', 'Hydrophilic', 'Salt bridge', 
+            '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10']
+print(num_dims_significant)
+print(significant_features)
 bar_heights = num_dims_significant
 bar_labels = significant_features
 
@@ -492,10 +517,9 @@ ax.invert_yaxis()
 # Add Plot Title
 ax.set_title("Number of Dimensions Related to Features")
 
-plt.savefig(f"{model} bar plot of feature correlations", bbox_inches='tight')
+#plt.savefig(f"{model} bar plot of feature correlations.png", bbox_inches='tight')
 plt.show()
 plt.clf()
-'''
 
 '''
 for dim_of_interest in range(373, 376):
@@ -518,7 +542,7 @@ for dim_of_interest in range(373, 376):
     
     print(yes_B/(yes_B + no_B))
     print(yes375_B/(yes375_B + no375_B))
-'''
+
 def score_cat(dssp_filtered, feature, encodings_filtered, sector, score_csv):
     # One hot encoding of features
     one_hot = pd.get_dummies(dssp_filtered[feature])
@@ -533,3 +557,4 @@ def score_cat(dssp_filtered, feature, encodings_filtered, sector, score_csv):
             print(aa)
             feature_act = one_hot[aa]
             eval_roc_auc(encodings_filtered, feature_act, feature, aa, score_csv)
+'''

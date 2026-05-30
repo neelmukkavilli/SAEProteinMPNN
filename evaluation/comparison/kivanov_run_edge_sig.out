@@ -1,0 +1,1210 @@
+flatpak: /WAVE/apps/x86_64/packages/Anaconda3/2025.12-2/app/lib/./libcrypto.so.3: version `OPENSSL_3.4.0' not found (required by /lib64/libostree-1.so.1)
+flatpak: /WAVE/apps/x86_64/packages/Anaconda3/2025.12-2/app/lib/./libcrypto.so.3: version `OPENSSL_3.4.0' not found (required by /lib64/librpmio.so.9)
+/WAVE/users2/unix/kivanov/.conda/envs/pytorchenv/bin/python
+----- Processing log15_edge_exp2_100e_0 -----
+        identifier  distance_bin  contact_order contact_type
+0         1a7w_0-0             0            0.0           Ph
+1         1a7w_0-1             1            1.0           XX
+2         1a7w_0-2             3            2.0           XX
+3        1a7w_0-32             4           32.0           XX
+4        1a7w_0-29             4           29.0           XX
+...            ...           ...            ...          ...
+10267  9lsd_213-60            11          153.0           XX
+10268  9lsd_213-12            11          201.0           XX
+10269   9lsd_213-4            11          209.0           Po
+10270  9lsd_213-32            11          181.0           XX
+10271  9lsd_213-73            11          140.0           XX
+
+[20580960 rows x 4 columns]
+Neighbor 1
+read data
+filtered data
+0
+Neighbor 2
+read data
+filtered data
+0
+Neighbor 3
+read data
+filtered data
+0.6752046316826823 42 distance_bin
+0.8162172766120199 126 distance_bin
+0.7916929646176706 154 distance_bin
+0.7077846863576835 182 distance_bin
+0.8597033960552556 225 distance_bin
+0.7631543662250273 226 distance_bin
+6
+Neighbor 4
+read data
+filtered data
+0
+Neighbor 5
+read data
+filtered data
+0
+Neighbor 6
+read data
+filtered data
+0
+Neighbor 7
+read data
+filtered data
+0
+Neighbor 8
+read data
+filtered data
+0
+Neighbor 9
+read data
+filtered data
+-0.6536664696653702 54 distance_bin
+-0.6310962035015397 208 distance_bin
+2
+Neighbor 10
+read data
+filtered data
+-0.6666660749666997 54 distance_bin
+-0.6396448487875884 208 distance_bin
+-0.6000355666176904 254 distance_bin
+3
+Neighbor 11
+read data
+filtered data
+-0.6580973572641362 54 distance_bin
+-0.6267458618300802 208 distance_bin
+2
+Neighbor 12
+read data
+filtered data
+-0.6414750711022105 54 distance_bin
+-0.6237657872839362 210 distance_bin
+2
+Neighbor 13
+read data
+filtered data
+-0.6096809476257994 54 distance_bin
+-0.6370653544817668 210 distance_bin
+2
+Neighbor 14
+read data
+filtered data
+0
+Neighbor 15
+read data
+filtered data
+0
+Neighbor 16
+read data
+filtered data
+0
+Neighbor 17
+read data
+filtered data
+0
+Neighbor 18
+read data
+filtered data
+0
+Neighbor 19
+read data
+filtered data
+0.6084143108815709 13 distance_bin
+1
+Neighbor 20
+read data
+filtered data
+0.6565221710197617 13 distance_bin
+0.6292166033373712 28 distance_bin
+0.6236669594996326 172 distance_bin
+3
+Neighbor 21
+read data
+filtered data
+0.6810365035974963 13 distance_bin
+0.6472306216137224 28 distance_bin
+0.6088372459414269 147 distance_bin
+0.6333112342385026 172 distance_bin
+4
+Neighbor 22
+read data
+filtered data
+0.7081504336361468 13 distance_bin
+0.6756753807450917 28 distance_bin
+0.6427045270510464 147 distance_bin
+0.6501018707883331 172 distance_bin
+4
+Neighbor 23
+read data
+filtered data
+0.7256027322026257 13 distance_bin
+0.6858277892855484 28 distance_bin
+0.6797142610988696 147 distance_bin
+0.6525363913615406 172 distance_bin
+4
+Neighbor 24
+read data
+filtered data
+0.7336875752805794 13 distance_bin
+0.697809578095363 28 distance_bin
+0.6000576084771059 56 distance_bin
+0.6962478683215332 147 distance_bin
+0.6538934049628976 172 distance_bin
+5
+Neighbor 25
+read data
+filtered data
+0.7491621116540773 13 distance_bin
+0.698566322782435 28 distance_bin
+0.6014628128441144 56 distance_bin
+0.7088867031788875 147 distance_bin
+0.6572489630529018 172 distance_bin
+5
+Neighbor 26
+read data
+filtered data
+0.7435398147003439 13 distance_bin
+0.7151154334421708 28 distance_bin
+0.6156136345032197 34 distance_bin
+0.6123759614490076 56 distance_bin
+0.7260332785415877 147 distance_bin
+0.656624696381194 172 distance_bin
+6
+Neighbor 27
+read data
+filtered data
+0.7420440331923024 13 distance_bin
+0.7169966656243275 28 distance_bin
+0.6458964930613642 34 distance_bin
+0.6284553059644316 56 distance_bin
+0.7280647547826179 147 distance_bin
+0.6278473651365468 148 distance_bin
+0.6367587077540953 172 distance_bin
+7
+Neighbor 28
+read data
+filtered data
+0.745364183821789 13 distance_bin
+0.7192079857374236 28 distance_bin
+0.6735539540015409 34 distance_bin
+0.6406252751450601 56 distance_bin
+0.728548526991732 147 distance_bin
+0.6314096491844098 148 distance_bin
+0.6356798056665338 172 distance_bin
+7
+Neighbor 29
+read data
+filtered data
+0.7339542771829709 13 distance_bin
+0.7094492879271663 28 distance_bin
+0.694534555590417 34 distance_bin
+0.603317500007382 46 distance_bin
+0.632597934077616 56 distance_bin
+0.7188419990313192 147 distance_bin
+0.6376640199457619 148 distance_bin
+0.6194666295178537 172 distance_bin
+8
+Neighbor 30
+read data
+filtered data
+0.7394133884000269 13 distance_bin
+0.7098709388562037 28 distance_bin
+0.7205560786121049 34 distance_bin
+0.6090398038658302 46 distance_bin
+0.647747508494644 56 distance_bin
+0.7227833631669365 147 distance_bin
+0.6513276143414035 148 distance_bin
+0.602296288817644 172 distance_bin
+8
+Neighbor 31
+read data
+filtered data
+0.7370436592104502 13 distance_bin
+0.7120593782460443 28 distance_bin
+0.7320290538948369 34 distance_bin
+0.6268006110633337 46 distance_bin
+0.6506656562490511 56 distance_bin
+0.7233003059603981 147 distance_bin
+0.6604066643946895 148 distance_bin
+0.6023055493469252 193 distance_bin
+8
+Neighbor 32
+read data
+filtered data
+0.7281773708273981 13 distance_bin
+0.7065218112738411 28 distance_bin
+0.754294686061319 34 distance_bin
+0.6408163264747178 46 distance_bin
+0.6474731276300696 56 distance_bin
+0.7151590910555953 147 distance_bin
+0.6693661603904169 148 distance_bin
+0.6094323042251563 169 distance_bin
+0.610186511466584 193 distance_bin
+9
+Neighbor 33
+read data
+filtered data
+0.7195700123671235 13 distance_bin
+0.7000610820362081 28 distance_bin
+0.7687574201962637 34 distance_bin
+0.6386911251149796 46 distance_bin
+0.654652535249165 56 distance_bin
+0.6160240822052312 71 distance_bin
+0.7018899606912125 147 distance_bin
+0.6698183769342538 148 distance_bin
+0.6315157360375847 169 distance_bin
+0.6132180014561436 193 distance_bin
+10
+Neighbor 34
+read data
+filtered data
+0.7178239935803062 13 distance_bin
+0.6847053601177959 28 distance_bin
+0.7842169346192347 34 distance_bin
+0.6354758360027997 46 distance_bin
+0.6514628913441978 56 distance_bin
+0.6435301424156322 71 distance_bin
+0.6926295380066126 147 distance_bin
+0.6690654811977585 148 distance_bin
+0.6524331671451403 169 distance_bin
+0.6037126992693731 193 distance_bin
+10
+Neighbor 35
+read data
+filtered data
+0.7121393482009962 13 distance_bin
+0.6779427457024902 28 distance_bin
+0.7966366181510967 34 distance_bin
+0.6354759011241597 46 distance_bin
+0.6427310546058672 56 distance_bin
+0.6691084165259975 71 distance_bin
+0.6824315983851665 147 distance_bin
+0.6596684520289178 148 distance_bin
+0.6477200827172865 169 distance_bin
+0.6085815280128666 199 distance_bin
+10
+Neighbor 36
+read data
+filtered data
+0.6996360198008427 13 distance_bin
+0.6717924096821761 28 distance_bin
+0.8073369147410232 34 distance_bin
+0.6318020259623004 46 distance_bin
+0.642219198726218 56 distance_bin
+0.681780681987439 71 distance_bin
+0.6110592699020293 113 distance_bin
+0.6684700077782016 147 distance_bin
+0.6588270892622062 148 distance_bin
+0.6659124652493235 169 distance_bin
+0.6011490111163942 193 distance_bin
+0.6403971815969596 199 distance_bin
+12
+Neighbor 37
+read data
+filtered data
+0.6919441225936995 13 distance_bin
+0.6575845740489408 28 distance_bin
+0.8149959415456839 34 distance_bin
+0.618422936291255 46 distance_bin
+0.6367384034081277 56 distance_bin
+0.7032914890968337 71 distance_bin
+0.6393103441394361 113 distance_bin
+0.6502437577824778 147 distance_bin
+0.6576959777090714 148 distance_bin
+0.6754994150848554 169 distance_bin
+0.6517859034666382 199 distance_bin
+11
+Neighbor 38
+read data
+filtered data
+0.6792105422266443 13 distance_bin
+0.6488233011583 28 distance_bin
+0.8210295780076491 34 distance_bin
+0.6148693058349559 46 distance_bin
+0.624995214537337 56 distance_bin
+0.7201015938021513 71 distance_bin
+0.6726601225250028 113 distance_bin
+0.6253719373848201 118 distance_bin
+0.6305815549743965 147 distance_bin
+0.6539429082235262 148 distance_bin
+0.6873565972405209 169 distance_bin
+0.6714662824167181 199 distance_bin
+12
+Neighbor 39
+read data
+filtered data
+0.6723895684747446 13 distance_bin
+0.6395139209548116 28 distance_bin
+0.8282181173906585 34 distance_bin
+0.6166004985466739 56 distance_bin
+0.7333287145962234 71 distance_bin
+0.694020319028513 113 distance_bin
+0.6536277409665112 118 distance_bin
+0.6144738000317825 147 distance_bin
+0.6438128667919618 148 distance_bin
+0.6806329844052619 169 distance_bin
+0.6801750819341785 199 distance_bin
+11
+Neighbor 40
+read data
+filtered data
+0.6547259816517972 13 distance_bin
+0.6240198821636613 28 distance_bin
+0.8359118761028901 34 distance_bin
+0.6186066726904687 56 distance_bin
+0.744072368149188 71 distance_bin
+0.7205304264411274 113 distance_bin
+0.6803820262990303 118 distance_bin
+0.6094761074122198 147 distance_bin
+0.6453386351916989 148 distance_bin
+0.6941231757495527 169 distance_bin
+0.7042755373149021 199 distance_bin
+11
+Neighbor 41
+read data
+filtered data
+0.6401953989194356 13 distance_bin
+0.6091275770556543 28 distance_bin
+0.6002800038790703 31 distance_bin
+0.8330467842226654 34 distance_bin
+0.6085278205543866 56 distance_bin
+0.7527364130624506 71 distance_bin
+0.7327647391697041 113 distance_bin
+0.6935897774347635 118 distance_bin
+0.6390193036138969 148 distance_bin
+0.6925577796318264 169 distance_bin
+0.7070159788972108 199 distance_bin
+11
+Neighbor 42
+read data
+filtered data
+0.6273931297053347 13 distance_bin
+0.8365664792415337 34 distance_bin
+0.6065093539667299 56 distance_bin
+0.7608955524702031 71 distance_bin
+0.6063162672750113 81 distance_bin
+0.7574646411989374 113 distance_bin
+0.7180120784455429 118 distance_bin
+0.6313958802993762 148 distance_bin
+0.6987544313329899 169 distance_bin
+0.7184015638465492 199 distance_bin
+0.6039322394937355 233 distance_bin
+11
+Neighbor 43
+read data
+filtered data
+0.6104701609766016 13 distance_bin
+0.8396654511587361 34 distance_bin
+0.6203017735394795 61 distance_bin
+0.766768053100804 71 distance_bin
+0.6164136715134871 81 distance_bin
+0.7698833046355829 113 distance_bin
+0.7396246580621442 118 distance_bin
+0.625750430859868 148 distance_bin
+0.6950057268954642 169 distance_bin
+0.7308664033929055 199 distance_bin
+0.6230382111462911 233 distance_bin
+11
+Neighbor 44
+read data
+filtered data
+0.6013502014036686 13 distance_bin
+0.837792364432509 34 distance_bin
+0.6439090750359473 61 distance_bin
+0.7702941793206457 71 distance_bin
+0.6227638595076863 81 distance_bin
+0.7745672941432781 113 distance_bin
+0.7508839121514687 118 distance_bin
+0.6033975956765217 148 distance_bin
+0.6915163180323629 169 distance_bin
+0.733238948149694 199 distance_bin
+0.6384758210210711 233 distance_bin
+11
+Neighbor 45
+read data
+filtered data
+0.8363674557189724 34 distance_bin
+0.6594714925939251 61 distance_bin
+0.7798829881342862 71 distance_bin
+0.6429611363536667 81 distance_bin
+0.7821743573754654 113 distance_bin
+0.7728761949893619 118 distance_bin
+0.6841801362873229 169 distance_bin
+0.739774666699472 199 distance_bin
+0.6559999818305428 233 distance_bin
+9
+Neighbor 46
+read data
+filtered data
+0.8362838149721031 34 distance_bin
+0.678687125877387 61 distance_bin
+0.7779376544478538 71 distance_bin
+0.6472697675348623 81 distance_bin
+0.7945784821013437 113 distance_bin
+0.788411156021773 118 distance_bin
+0.6873257100744987 169 distance_bin
+0.7501978131824154 199 distance_bin
+0.6188812332816752 210 distance_bin
+0.6701024551494051 233 distance_bin
+10
+Neighbor 47
+read data
+filtered data
+0.8333657573965387 34 distance_bin
+0.6892370087464865 61 distance_bin
+0.7813835860537793 71 distance_bin
+0.6477705690030979 81 distance_bin
+0.7939422963481451 113 distance_bin
+0.7882869918002156 118 distance_bin
+0.6783706636810594 169 distance_bin
+0.753477996100361 199 distance_bin
+0.6237387551837084 210 distance_bin
+0.6875918718322387 233 distance_bin
+10
+Neighbor 48
+read data
+filtered data
+0.8336686456488958 34 distance_bin
+0.7167953555850708 61 distance_bin
+0.7809569277840174 71 distance_bin
+0.6468019944784258 81 distance_bin
+0.8023161024321495 113 distance_bin
+0.7947352712901923 118 distance_bin
+0.6841426598653708 169 distance_bin
+0.7535416081353549 199 distance_bin
+0.6272725303167874 210 distance_bin
+0.6951853371356262 233 distance_bin
+0.6111273608741707 241 distance_bin
+11
+{13, 147, 148, 154, 28, 31, 34, 169, 42, 172, 46, 182, 54, 56, 61, 193, 71, 199, 208, 81, 210, 225, 226, 233, 113, 241, 118, 126, 254}
+[0, 0, 6, 0, 0, 0, 0, 0, 2, 3, 2, 2, 2, 0, 0, 0, 0, 0, 1, 3, 4, 4, 4, 5, 5, 6, 7, 7, 8, 8, 8, 9, 10, 10, 10, 12, 11, 12, 11, 11, 11, 11, 11, 11, 9, 10, 10, 11] [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47]
+[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47]
+[0, 0, 6, 0, 0, 0, 0, 0, 2, 3, 2, 2, 2, 0, 0, 0, 0, 0, 1, 3, 4, 4, 4, 5, 5, 6, 7, 7, 8, 8, 8, 9, 10, 10, 10, 12, 11, 12, 11, 11, 11, 11, 11, 11, 9, 10, 10, 11]
+----- Processing log15_edge_exp2_100e_1 -----
+        identifier  distance_bin  contact_order contact_type
+0         1a7w_0-0             0            0.0           Ph
+1         1a7w_0-1             1            1.0           XX
+2         1a7w_0-2             3            2.0           XX
+3        1a7w_0-32             4           32.0           XX
+4        1a7w_0-29             4           29.0           XX
+...            ...           ...            ...          ...
+10267  9lsd_213-60            11          153.0           XX
+10268  9lsd_213-12            11          201.0           XX
+10269   9lsd_213-4            11          209.0           Po
+10270  9lsd_213-32            11          181.0           XX
+10271  9lsd_213-73            11          140.0           XX
+
+[20580960 rows x 4 columns]
+Neighbor 1
+read data
+filtered data
+0
+Neighbor 2
+read data
+filtered data
+0
+Neighbor 3
+read data
+filtered data
+0
+Neighbor 4
+read data
+filtered data
+0
+Neighbor 5
+read data
+filtered data
+0
+Neighbor 6
+read data
+filtered data
+0
+Neighbor 7
+read data
+filtered data
+0
+Neighbor 8
+read data
+filtered data
+0
+Neighbor 9
+read data
+filtered data
+0
+Neighbor 10
+read data
+filtered data
+-0.6189747583795386 60 distance_bin
+-0.6020081309821695 224 distance_bin
+2
+Neighbor 11
+read data
+filtered data
+-0.6131926737767596 60 distance_bin
+-0.6023422358464255 224 distance_bin
+2
+Neighbor 12
+read data
+filtered data
+-0.6038795139242923 60 distance_bin
+1
+Neighbor 13
+read data
+filtered data
+0
+Neighbor 14
+read data
+filtered data
+0
+Neighbor 15
+read data
+filtered data
+0
+Neighbor 16
+read data
+filtered data
+0
+Neighbor 17
+read data
+filtered data
+0.6158304389291921 143 distance_bin
+1
+Neighbor 18
+read data
+filtered data
+0.654441507128785 143 distance_bin
+1
+Neighbor 19
+read data
+filtered data
+0.6885696138361705 143 distance_bin
+1
+Neighbor 20
+read data
+filtered data
+0.7148545646183984 143 distance_bin
+1
+Neighbor 21
+read data
+filtered data
+0.7223278743547513 143 distance_bin
+1
+Neighbor 22
+read data
+filtered data
+0.742292069940034 143 distance_bin
+1
+Neighbor 23
+read data
+filtered data
+0.7472787868765809 143 distance_bin
+1
+Neighbor 24
+read data
+filtered data
+0.7480745558899573 143 distance_bin
+1
+Neighbor 25
+read data
+filtered data
+0.7450846988106743 143 distance_bin
+0.6058966758691126 188 distance_bin
+2
+Neighbor 26
+read data
+filtered data
+0.6361208588934502 120 distance_bin
+0.7434580153314874 143 distance_bin
+0.6453295720627733 188 distance_bin
+3
+Neighbor 27
+read data
+filtered data
+0.6684916791233699 120 distance_bin
+0.7486413240482702 143 distance_bin
+0.6774949812510247 188 distance_bin
+3
+Neighbor 28
+read data
+filtered data
+0.6876189788349616 120 distance_bin
+0.6208530805420587 121 distance_bin
+0.7456568121074918 143 distance_bin
+0.6290484793778117 179 distance_bin
+0.6796962270606705 188 distance_bin
+5
+Neighbor 29
+read data
+filtered data
+0.7055637167380974 120 distance_bin
+0.6392504837393131 121 distance_bin
+0.7424817858031183 143 distance_bin
+0.6740836657715041 179 distance_bin
+0.7017044874998664 188 distance_bin
+5
+Neighbor 30
+read data
+filtered data
+0.7169526003008923 120 distance_bin
+0.6776019638908701 121 distance_bin
+0.7342510772329203 143 distance_bin
+0.7046978136244126 179 distance_bin
+0.7169693870374777 188 distance_bin
+5
+Neighbor 31
+read data
+filtered data
+0.7281214512942162 120 distance_bin
+0.703385208595909 121 distance_bin
+0.7268330129887779 143 distance_bin
+0.7307349737014477 179 distance_bin
+0.7216162306459029 188 distance_bin
+5
+Neighbor 32
+read data
+filtered data
+0.6242487978930003 36 distance_bin
+0.7347425968157766 120 distance_bin
+0.7254026405583305 121 distance_bin
+0.7207000625053896 143 distance_bin
+0.753846862691567 179 distance_bin
+0.7331379040644582 188 distance_bin
+6
+Neighbor 33
+read data
+filtered data
+0.6413145197707245 36 distance_bin
+0.7411633126911704 120 distance_bin
+0.7458087057793761 121 distance_bin
+0.6100115204642246 129 distance_bin
+0.71055076490642 143 distance_bin
+0.7671817605517737 179 distance_bin
+0.7314173088119394 188 distance_bin
+7
+Neighbor 34
+read data
+filtered data
+0.6600445528955677 36 distance_bin
+0.6128423085180499 37 distance_bin
+0.7414470637974856 120 distance_bin
+0.7646311451669838 121 distance_bin
+0.6396693101136859 129 distance_bin
+0.6166460152856353 133 distance_bin
+0.7030255032307394 143 distance_bin
+0.782491492578338 179 distance_bin
+0.7360162138581561 188 distance_bin
+9
+Neighbor 35
+read data
+filtered data
+0.6778516833933936 36 distance_bin
+0.6296462560444637 37 distance_bin
+0.7428984324650086 120 distance_bin
+0.7822640947783374 121 distance_bin
+0.6653621046863252 129 distance_bin
+0.6406303977256681 133 distance_bin
+0.6977303331179914 143 distance_bin
+0.7962757470153403 179 distance_bin
+0.7512122569135748 188 distance_bin
+9
+Neighbor 36
+read data
+filtered data
+0.696053224163324 36 distance_bin
+0.6412406091880437 37 distance_bin
+0.7376699017906275 120 distance_bin
+0.7941186517626394 121 distance_bin
+0.6901497840976888 129 distance_bin
+0.6623969104266623 133 distance_bin
+0.6798454101923218 143 distance_bin
+0.8060756842966009 179 distance_bin
+0.7516094728651093 188 distance_bin
+9
+Neighbor 37
+read data
+filtered data
+0.704709362354575 36 distance_bin
+0.6492100563492957 37 distance_bin
+0.7303881657010014 120 distance_bin
+0.8083406565750496 121 distance_bin
+0.7101232957007285 129 distance_bin
+0.6835737514528296 133 distance_bin
+0.6675843891991393 143 distance_bin
+0.8107806064882821 179 distance_bin
+0.7550788663845154 188 distance_bin
+9
+Neighbor 38
+read data
+filtered data
+0.7168890112984195 36 distance_bin
+0.6825069184996045 37 distance_bin
+0.7256697926791279 120 distance_bin
+0.8166210223818651 121 distance_bin
+0.7194036472183206 129 distance_bin
+0.696316923362491 133 distance_bin
+0.6524486783314858 143 distance_bin
+0.8250360688152394 179 distance_bin
+0.7575650292843586 188 distance_bin
+9
+Neighbor 39
+read data
+filtered data
+0.7260796958361131 36 distance_bin
+0.6763031468619467 37 distance_bin
+0.7148398608114896 120 distance_bin
+0.8263839814371574 121 distance_bin
+0.7459050031735802 129 distance_bin
+0.7077134574076096 133 distance_bin
+0.644352547697668 143 distance_bin
+0.8215751417439733 179 distance_bin
+0.7595543843947938 188 distance_bin
+9
+Neighbor 40
+read data
+filtered data
+0.730639839991293 36 distance_bin
+0.6824982886585087 37 distance_bin
+0.701354647988826 120 distance_bin
+0.826789499835719 121 distance_bin
+0.7546101024094062 129 distance_bin
+0.7167826661368445 133 distance_bin
+0.6334135884367287 143 distance_bin
+0.8205194996090017 179 distance_bin
+0.7618745638522154 188 distance_bin
+9
+Neighbor 41
+read data
+filtered data
+0.7369931996838605 36 distance_bin
+0.693304376613851 37 distance_bin
+0.6155119356192273 74 distance_bin
+0.6893121665585793 120 distance_bin
+0.8371720104210606 121 distance_bin
+0.7580491408979673 129 distance_bin
+0.7328314497893663 133 distance_bin
+0.6059315268975358 143 distance_bin
+0.8242766686597666 179 distance_bin
+0.7612452269067318 188 distance_bin
+10
+Neighbor 42
+read data
+filtered data
+0.7406318529187533 36 distance_bin
+0.6967499616476681 37 distance_bin
+0.6107776066576948 74 distance_bin
+0.6716108631110219 120 distance_bin
+0.8374840589940578 121 distance_bin
+0.7666303617368122 129 distance_bin
+0.7383300867818048 133 distance_bin
+0.8204073359812268 179 distance_bin
+0.7594277460090605 188 distance_bin
+9
+Neighbor 43
+read data
+filtered data
+0.7390985374545875 36 distance_bin
+0.6991924003919056 37 distance_bin
+0.6250858772585077 74 distance_bin
+0.6503086352863677 120 distance_bin
+0.8408131857797606 121 distance_bin
+0.7660884674939596 129 distance_bin
+0.6145872250928083 131 distance_bin
+0.7432334321214615 133 distance_bin
+0.8111542336744221 179 distance_bin
+0.7599225361633379 188 distance_bin
+0.618800423700687 251 distance_bin
+11
+Neighbor 44
+read data
+filtered data
+0.7358139196555131 36 distance_bin
+0.6994251721689235 37 distance_bin
+0.6216462320848439 74 distance_bin
+0.6320685692630004 120 distance_bin
+0.8464923857933311 121 distance_bin
+0.773674576678437 129 distance_bin
+0.62451001861303 131 distance_bin
+0.7480633417744991 133 distance_bin
+0.8141588578492593 179 distance_bin
+0.7591082199803927 188 distance_bin
+0.6318850912359655 251 distance_bin
+11
+Neighbor 45
+read data
+filtered data
+0.7397260189045107 36 distance_bin
+0.7240008441744163 37 distance_bin
+0.6409052678566912 74 distance_bin
+0.6176762226995753 120 distance_bin
+0.8515188305575396 121 distance_bin
+0.6273640599416338 128 distance_bin
+0.7793346387967999 129 distance_bin
+0.6565155642085316 131 distance_bin
+0.7553106685539315 133 distance_bin
+0.8133207898979536 179 distance_bin
+0.7642427882910359 188 distance_bin
+0.6079519016331602 201 distance_bin
+0.6587107654546016 251 distance_bin
+13
+Neighbor 46
+read data
+filtered data
+0.7411075492301471 36 distance_bin
+0.7147139642570002 37 distance_bin
+0.6482608533766134 74 distance_bin
+0.8473743164504954 121 distance_bin
+0.6316249763558167 128 distance_bin
+0.7875268054651869 129 distance_bin
+0.6704769181000461 131 distance_bin
+0.7644650664330154 133 distance_bin
+0.8020708095217509 179 distance_bin
+0.7567287983170221 188 distance_bin
+0.6021460652557965 233 distance_bin
+0.6830926508214228 251 distance_bin
+12
+Neighbor 47
+read data
+filtered data
+0.7337368482542346 36 distance_bin
+0.7114881402865132 37 distance_bin
+0.6477332956732152 74 distance_bin
+0.6085882972548622 79 distance_bin
+0.8503250587485451 121 distance_bin
+0.6464367007411074 128 distance_bin
+0.7874822537740817 129 distance_bin
+0.6846244017762362 131 distance_bin
+0.7661109993095614 133 distance_bin
+0.8002417035454805 179 distance_bin
+0.753375374857369 188 distance_bin
+0.616424425840109 201 distance_bin
+0.6220794872346875 233 distance_bin
+0.7015055706299325 251 distance_bin
+14
+Neighbor 48
+read data
+filtered data
+0.7264978732532855 36 distance_bin
+0.7126972717825467 37 distance_bin
+0.6644738375826138 74 distance_bin
+0.6283134352793658 79 distance_bin
+0.8479805616074891 121 distance_bin
+0.6498724646409105 128 distance_bin
+0.7890864427248333 129 distance_bin
+0.6990753797181933 131 distance_bin
+0.7712999024643744 133 distance_bin
+0.6031018084582407 163 distance_bin
+0.7899034735906778 179 distance_bin
+0.7552449662869775 188 distance_bin
+0.6006469610585745 201 distance_bin
+0.6376180608415593 233 distance_bin
+0.7183730035106797 251 distance_bin
+15
+{128, 129, 131, 133, 143, 163, 36, 37, 179, 60, 188, 201, 74, 79, 224, 233, 120, 121, 251}
+[0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 2, 3, 3, 5, 5, 5, 5, 6, 7, 9, 9, 9, 9, 9, 9, 9, 10, 9, 11, 11, 13, 12, 14, 15] [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47]
+[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47]
+[0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 2, 3, 3, 5, 5, 5, 5, 6, 7, 9, 9, 9, 9, 9, 9, 9, 10, 9, 11, 11, 13, 12, 14, 15]
+----- Processing log15_edge_exp2_100e_2 -----
+        identifier  distance_bin  contact_order contact_type
+0         1a7w_0-0             0            0.0           Ph
+1         1a7w_0-1             1            1.0           XX
+2         1a7w_0-2             3            2.0           XX
+3        1a7w_0-32             4           32.0           XX
+4        1a7w_0-29             4           29.0           XX
+...            ...           ...            ...          ...
+10267  9lsd_213-60            11          153.0           XX
+10268  9lsd_213-12            11          201.0           XX
+10269   9lsd_213-4            11          209.0           Po
+10270  9lsd_213-32            11          181.0           XX
+10271  9lsd_213-73            11          140.0           XX
+
+[20580960 rows x 4 columns]
+Neighbor 1
+read data
+filtered data
+0
+Neighbor 2
+read data
+filtered data
+0
+Neighbor 3
+read data
+filtered data
+0
+Neighbor 4
+read data
+filtered data
+0
+Neighbor 5
+read data
+filtered data
+0
+Neighbor 6
+read data
+filtered data
+0
+Neighbor 7
+read data
+filtered data
+0
+Neighbor 8
+read data
+filtered data
+0
+Neighbor 9
+read data
+filtered data
+0
+Neighbor 10
+read data
+filtered data
+0
+Neighbor 11
+read data
+filtered data
+0
+Neighbor 12
+read data
+filtered data
+0
+Neighbor 13
+read data
+filtered data
+0
+Neighbor 14
+read data
+filtered data
+0
+Neighbor 15
+read data
+filtered data
+0
+Neighbor 16
+read data
+filtered data
+0
+Neighbor 17
+read data
+filtered data
+0
+Neighbor 18
+read data
+filtered data
+0
+Neighbor 19
+read data
+filtered data
+0
+Neighbor 20
+read data
+filtered data
+0
+Neighbor 21
+read data
+filtered data
+0
+Neighbor 22
+read data
+filtered data
+0
+Neighbor 23
+read data
+filtered data
+0
+Neighbor 24
+read data
+filtered data
+0
+Neighbor 25
+read data
+filtered data
+0.601492031633979 79 distance_bin
+0.6396522280295422 92 distance_bin
+2
+Neighbor 26
+read data
+filtered data
+0.6217402665433145 79 distance_bin
+0.6765350746471056 92 distance_bin
+2
+Neighbor 27
+read data
+filtered data
+0.6278145910259824 79 distance_bin
+0.7115201583384771 92 distance_bin
+2
+Neighbor 28
+read data
+filtered data
+0.625492309198925 79 distance_bin
+0.7291785939794234 92 distance_bin
+2
+Neighbor 29
+read data
+filtered data
+0.624489781006904 79 distance_bin
+0.7495688492473703 92 distance_bin
+2
+Neighbor 30
+read data
+filtered data
+0.6233885460020918 79 distance_bin
+0.7704850536996731 92 distance_bin
+0.6290931548945704 103 distance_bin
+3
+Neighbor 31
+read data
+filtered data
+0.6188545160863473 79 distance_bin
+0.7829450101847159 92 distance_bin
+0.6466704913647991 103 distance_bin
+3
+Neighbor 32
+read data
+filtered data
+0.7975144221912542 92 distance_bin
+0.6766189073220606 103 distance_bin
+0.6483132618734124 249 distance_bin
+3
+Neighbor 33
+read data
+filtered data
+0.8044782644346331 92 distance_bin
+0.6928107205712035 103 distance_bin
+0.6156208660729034 176 distance_bin
+0.6629915648329746 249 distance_bin
+4
+Neighbor 34
+read data
+filtered data
+0.8117543170023996 92 distance_bin
+0.7103648780724594 103 distance_bin
+0.6215722867660538 176 distance_bin
+0.6829468975974191 249 distance_bin
+4
+Neighbor 35
+read data
+filtered data
+0.8194280769197755 92 distance_bin
+0.7308320996618644 103 distance_bin
+0.6332592279594988 176 distance_bin
+0.7044084150827945 249 distance_bin
+4
+Neighbor 36
+read data
+filtered data
+0.8206754124495782 92 distance_bin
+0.742018310676155 103 distance_bin
+0.6477372441670569 176 distance_bin
+0.7180765844926078 249 distance_bin
+4
+Neighbor 37
+read data
+filtered data
+0.8243316960613469 92 distance_bin
+0.7428144473336595 103 distance_bin
+0.655209343290138 176 distance_bin
+0.7212195919354786 249 distance_bin
+4
+Neighbor 38
+read data
+filtered data
+0.8278418733406361 92 distance_bin
+0.7487902105269899 103 distance_bin
+0.6491059010846796 176 distance_bin
+0.7328164762363047 249 distance_bin
+4
+Neighbor 39
+read data
+filtered data
+0.6108283721697514 80 distance_bin
+0.8274868870247711 92 distance_bin
+0.7466010884982704 103 distance_bin
+0.6576507321565137 176 distance_bin
+0.7413031097831575 249 distance_bin
+5
+Neighbor 40
+read data
+filtered data
+0.6282305448853844 80 distance_bin
+0.8243222867886371 92 distance_bin
+0.7575881010241701 103 distance_bin
+0.6455036575842089 176 distance_bin
+0.7483814730669602 249 distance_bin
+5
+Neighbor 41
+read data
+filtered data
+0.6648454400432282 80 distance_bin
+0.8256093541623295 92 distance_bin
+0.7525225213944284 103 distance_bin
+0.6601763890283985 176 distance_bin
+0.7538304914952709 249 distance_bin
+5
+Neighbor 42
+read data
+filtered data
+0.675303756057588 80 distance_bin
+0.8179217785537518 92 distance_bin
+0.7490747102458284 103 distance_bin
+0.652464964239275 176 distance_bin
+0.7572011501142786 249 distance_bin
+5
+Neighbor 43
+read data
+filtered data
+0.6966158994039492 80 distance_bin
+0.8213439744584825 92 distance_bin
+0.749271867858619 103 distance_bin
+0.6551546275774418 176 distance_bin
+0.7613777852786283 249 distance_bin
+5
+Neighbor 44
+read data
+filtered data
+0.7127483648041334 80 distance_bin
+0.8198386046266295 92 distance_bin
+0.7470873601220521 103 distance_bin
+0.6467615432170921 176 distance_bin
+0.7634202871243085 249 distance_bin
+5
+Neighbor 45
+read data
+filtered data
+0.7279871782117016 80 distance_bin
+0.8174716588796118 92 distance_bin
+0.7410868586098489 103 distance_bin
+0.6430724698981005 176 distance_bin
+0.7642152634390754 249 distance_bin
+5
+Neighbor 46
+read data
+filtered data
+0.740455602916896 80 distance_bin
+0.8110685557644908 92 distance_bin
+0.7290420440937351 103 distance_bin
+0.6366366786249837 176 distance_bin
+0.7648687106250034 249 distance_bin
+5
+Neighbor 47
+read data
+filtered data
+0.7552428225046453 80 distance_bin
+0.8131781964348551 92 distance_bin
+0.7312631051567263 103 distance_bin
+0.6178371840570169 127 distance_bin
+0.6354912840418332 176 distance_bin
+0.7628415310926409 249 distance_bin
+6
+Neighbor 48
+read data
+filtered data
+0.7597923171609253 80 distance_bin
+0.8003968166490721 92 distance_bin
+0.7142406715263452 103 distance_bin
+0.6319978085849741 127 distance_bin
+0.6225204985619843 176 distance_bin
+0.7625971486344907 249 distance_bin
+6
+{103, 79, 176, 80, 249, 92, 127}
+[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 2, 3, 3, 3, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 6, 6] [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47]
+[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47]
+[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 2, 3, 3, 3, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 6, 6]

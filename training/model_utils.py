@@ -1,23 +1,14 @@
 from __future__ import print_function
-import json, time, os, sys, glob
-import shutil
 import numpy as np
 import torch
-from torch import optim
-from torch.utils.data import DataLoader
-from torch.utils.data.dataset import random_split, Subset
 import torch.utils
 import torch.utils.checkpoint
 
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
-
-import copy
 import torch.nn as nn
 import torch.nn.functional as F
 import random
-import itertools
-
 
 def featurize(batch, device):
     alphabet = 'ACDEFGHIKLMNPQRSTVWYX'

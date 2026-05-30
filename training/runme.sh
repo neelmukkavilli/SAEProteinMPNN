@@ -3,6 +3,7 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 python training.py \
 	--SAE_level "node" \
 	--reinit "classic" \
+	--reinsert_SAE \
 	--learning_rate 0.00000 \
 	--sparse_weight 0.001 \
 	--reinit_every_n_steps 5000 \

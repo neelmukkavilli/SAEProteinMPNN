@@ -130,6 +130,8 @@ dmypy.json
 /evaluation/created_data/
 /evaluation/created_data/
 /evaluation/created_data/uniprot/out/
+/evaluation/data_labeling/uniprot/out/
+/evaluation/comparison/graphics/
 /evaluation/inputs/
 /evaluation/disregarded/
 /evaluation/encodings/
@@ -146,6 +148,7 @@ dmypy.json
 /training/pdb_2021aug02_sample/
 
 /analysis/.vscode/
+/analysis/graphics/
 
 /sae_training/evaluation/created_data/
 /sae_training/evaluation/created_data/uniprot/out/
