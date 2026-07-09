@@ -14,10 +14,10 @@ SAE_type = 'node'
 model = 'log17_exp2'  # ex: dense, log17_exp2
 exp_size = 2
 layer = 2 # 0-indexed
-mask_lvl = 0.1
+mask_lvl = 0.01
 
 # Load feature data and encodings
-dssp_path = '/home/neelm/SAEProteinMPNN/evaluation/created_data/features/node_features.csv'
+dssp_path = '/home/neelm/SAEProteinMPNN/evaluation/created_data/features/ss_end_node_features.csv'
 encodings_path = '/home/neelm/SAEProteinMPNN/evaluation/created_data/encodings/' + SAE_type + '_' + model + '/output_' + model + '_' + str(layer) + '.pkl'
 #encodings = pl.read_csv(encodings_path).to_pandas()
 
@@ -265,7 +265,7 @@ def categorize_AA(feature_df):
     #feature_df['Function'] = feature_df['residue'].map(residue_to_function)
     #feature_df['Shape'] = feature_df['residue'].map(residue_to_shape)
 
-categorize_AA(dssp)
+#categorize_AA(dssp)
 
 def count_categorical(features, base_feature, n_dims, encodings, bar_labels, bar_heights, sum=True):
     one_hot = pd.get_dummies(features[base_feature])
@@ -291,24 +291,20 @@ def count_sig_dims(n_dims, encodings, features):
 
     bar_labels = []
     bar_heights = []
-    count_categorical(features, 'sec_struct', n_dims, encodings, bar_labels, bar_heights, sum=False)
-    count_categorical(features, 'Function', n_dims, encodings, bar_labels, bar_heights)
-    count_categorical(features, 'Polarity', n_dims, encodings, bar_labels, bar_heights)
-    count_categorical(features, 'Shape', n_dims, encodings, bar_labels, bar_heights)
-    count_categorical(features, 'Volume', n_dims, encodings, bar_labels, bar_heights)
+    #count_categorical(features, 'sec_struct', n_dims, encodings, bar_labels, bar_heights, sum=False)
+    #count_categorical(features, 'Function', n_dims, encodings, bar_labels, bar_heights)
+    #count_categorical(features, 'Polarity', n_dims, encodings, bar_labels, bar_heights)
+    #count_categorical(features, 'Shape', n_dims, encodings, bar_labels, bar_heights)
+    #count_categorical(features, 'Volume', n_dims, encodings, bar_labels, bar_heights)
 
-    for feat in features.columns[7:]:
-        counter = 0
-        for dim in range(n_dims):
-            counter += safe_pearsonr(encodings, features[feat], feat, dim)
-        print(feat)
-        print(counter)
-        bar_labels.append(feat)
-        bar_heights.append(counter)
-
+    #for feat in features.columns[7:]:
+    feat = 'ss_end'
+    counter = 0
+    count_categorical(features, feat, n_dims, encodings, bar_labels, bar_heights, sum=False)
     return bar_labels, bar_heights
 
 bar_labels, bar_heights = count_sig_dims(n_dims, encodings, dssp)
+print(bar_heights)
 
 def clean_bar_graph(labels, heights):
     rename = {
@@ -364,7 +360,7 @@ def clean_bar_graph(labels, heights):
     plt.show()
     plt.clf()
 
-clean_bar_graph(bar_labels, bar_heights)
+#clean_bar_graph(bar_labels, bar_heights)
 
 '''
 features = dssp['3']

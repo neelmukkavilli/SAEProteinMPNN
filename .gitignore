@@ -128,7 +128,7 @@ dmypy.json
 # Pyre type checker
 .pyre/
 /evaluation/created_data/
-/evaluation/created_data/
+/evaluation/graphics/
 /evaluation/created_data/uniprot/out/
 /evaluation/data_labeling/uniprot/out/
 /evaluation/comparison/graphics/
@@ -149,6 +149,8 @@ dmypy.json
 
 /analysis/.vscode/
 /analysis/graphics/
+
+/imported_data/
 
 /sae_training/evaluation/created_data/
 /sae_training/evaluation/created_data/uniprot/out/

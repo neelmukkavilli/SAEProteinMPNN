@@ -13,8 +13,6 @@ import torch.nn.functional as F
 import random
 import itertools
 import matplotlib.pyplot as plt
-from sklearn.decomposition import PCA
-import seaborn as sns
 #A number of functions/classes are adopted from: https://github.com/jingraham/neurips19-graph-protein-design
 
 def parse_fasta(filename,limit=-1, omit=[]):

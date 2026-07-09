@@ -166,41 +166,36 @@ def run_dssp(pdb_path):
     parser = PDBParser(QUIET=True)
     structure = parser.get_structure("prot", str(pdb_path))
     model = structure[0]
-    dssp = DSSP(model, str(pdb_path), dssp='mkdssp')
-    for key in dssp.keys():
-        try:
-            chain = key[0]
-            idx = key[1][1]
-            aa, ss, asa, phi, psi = (
-                dssp[key][1], dssp[key][2], dssp[key][3],
-                dssp[key][4], dssp[key][5]
-            )
-            identifier = f"{str(pdb_path)[-8:-4]}{chain}{idx}"
-            main_dict[identifier]['residue'] = aa
-            main_dict[identifier]['sec_struct'] = ss
-            
-            # Flag if residue lies on edge of secondary structure
-            ss_edge = [False, False]
+    try:
+        dssp = DSSP(model, str(pdb_path), dssp='mkdssp')
+        for key in dssp.keys():
             try:
-                ss0 = dssp[(key[0], (key[1][0], key[1][1] - 1, key[1][2]))][2]
-                ss_edge[0] = (ss != ss0)
-            except KeyError:
-                ss_edge[0] = True
-            try:
-                ss2 = dssp[(key[0], (key[1][0], key[1][1] + 1, key[1][2]))][2]
-                ss_edge[1] = (ss != ss2)
-            except KeyError:
-                ss_edge[1] = True
+                chain = key[0]
+                idx = key[1][1]
+                ss = dssp[key][2]
+                identifier = f"{str(pdb_path)[-8:-4]}{chain}{idx}"
+                main_dict[identifier] = {}
+                # Flag if residue lies on edge of secondary structure
+                ss_edge = [False, False]
+                try:
+                    ss0 = dssp[(key[0], (key[1][0], key[1][1] - 1, key[1][2]))][2]
+                    ss_edge[0] = (ss != ss0)
+                except KeyError:
+                    ss_edge[0] = True
+                try:
+                    ss2 = dssp[(key[0], (key[1][0], key[1][1] + 1, key[1][2]))][2]
+                    ss_edge[1] = (ss != ss2)
+                except KeyError:
+                    ss_edge[1] = True
 
-            if ss_edge[0] or ss_edge[1]:
-                main_dict[identifier]['ss_edge'] = True
-            else:
-                main_dict[identifier]['ss_edge'] = False
-            main_dict[identifier]['ASA'] = round(asa, 3)
-            main_dict[identifier]['phi'] = phi
-            main_dict[identifier]['psi'] = psi
-        except (TypeError, KeyError):
-            continue
+                if ss_edge[0] or ss_edge[1]:
+                    main_dict[identifier]['ss_end'] = True
+                else:
+                    main_dict[identifier]['ss_end'] = False
+            except (TypeError, KeyError, ):
+                continue
+    except Exception:
+        print(f'skipped {str(pdb_path)}')
 
 input_pdb_dir = Path('../inputs')
 pdb_files = list(input_pdb_dir.glob('*.pdb'))
@@ -215,11 +210,11 @@ print(len(set(pdb_files)))
 pdb_files = pdb_files  # Limit to first few PDB files for testing
 main_df = pd.DataFrame()
 for pdb_file in pdb_files:
-    find_node_features(str(pdb_file))
+    #find_node_features(str(pdb_file))
     print("Working on: " + str(pdb_file)[-8:])
     run_dssp(pdb_file)
     #column_names = ['bfactor', 'xy', 'xz', 'yz', 'philic', 'phobic', 'SB'] + list(range(16))
-    column_names = ['residue', 'sec_struct', 'ASA', 'phi', 'psi', 'bfactor', 'xy', 'xz', 'yz', 'philic', 'phobic', 'SB'] + list(range(16)) + ['ss_edge']
+    column_names = ['ss_end']#['residue', 'sec_struct', 'ASA', 'phi', 'psi', 'bfactor', 'xy', 'xz', 'yz', 'philic', 'phobic', 'SB'] + list(range(16)) + ['ss_edge']
     df = pd.DataFrame(main_dict).T[column_names]
     main_df = pd.concat([main_df, df], axis=0)
 
@@ -243,30 +238,5 @@ def norm_vals(arr):
 
     return normalized_col.round(5)
 
-arr = main_df['phi']
-norm_arr = norm_angles(arr)
-main_df['phi'] = norm_arr.values
-print("phi normalized")
-
-arr = main_df['psi']
-norm_arr = norm_angles(arr)
-main_df['psi'] = norm_arr.values
-print("psi normalized")
-
-arr = main_df['xy']
-norm_arr = norm_angles(arr)
-main_df['xy'] = norm_arr.values
-print("xy normalized")
-
-arr = main_df['xz']
-norm_arr = norm_angles(arr)
-main_df['xz'] = norm_arr.values
-print("xz normalized")
-
-arr = main_df['yz']
-norm_arr = norm_angles(arr)
-main_df['yz'] = norm_arr.values
-print("yz normalized")
-
-main_df.to_csv('ss_edge_node_features.csv', index=True)
+main_df.to_csv('ss_end_node_features.csv', index=True)
 print("Node features saved")

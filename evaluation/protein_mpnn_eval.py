@@ -257,8 +257,7 @@ def main(args):
     
     csv_outputs = []
     for i in range(3):
-        csv_outputs.append(f'created_data/encodings/output_' + args.csv_output + '_' + str(i) + '.pkl')
-
+        csv_outputs.append(f'created_data/encodings/idp_' + args.SAE_level + '_' + args.csv_output + '/output_' + args.csv_output + '_' + str(i) + '.pkl')
 
     # Timing
     start_time = time.time()
