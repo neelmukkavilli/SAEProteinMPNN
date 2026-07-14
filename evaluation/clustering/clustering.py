@@ -7,46 +7,80 @@ from sklearn.cluster import HDBSCAN, OPTICS, Birch, AgglomerativeClustering
 from sklearn.metrics import silhouette_score
 from sklearn.preprocessing import StandardScaler
 from sklearn.manifold import TSNE
+from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import os
 import argparse
 import pickle
 
 expansion = 2
-model = f'log17_exp{expansion}'
+model = 'log17_exp2'  #ex: dense, log17_exp2
 SAE_type = 'node'
-layer = 0
+layer = 2 # 0-indexed
 cluster_mask_level = 0.01
 
-encodings_path = f'../created_data/encodings/{SAE_type}_{model}/output_{model}_{layer}.pkl'
-dfs = []
-with open(encodings_path, "rb") as f:
-    while True:
-        try:
-            dfs.append(pickle.load(f))
-        except EOFError:
-            break
-    encodings = pd.concat(dfs, ignore_index=True)
 
-# Filter out incomplete or missing rows
-print("Encoding data shape before filtering", encodings.shape)
-encodings = encodings.dropna(axis='index')
-encodings = encodings.sort_values('identifier').reset_index(drop=True)
+def load_data(SAE_type, model, layer, mask_lvl, load_dssp=True):
 
-# Split up labels from encodings
-encodings = encodings.iloc[:, 1:]
+    # Load feature data and encodings
+    dssp_path = '/home/neelm/SAEProteinMPNN/evaluation/created_data/features/node_features.csv'
+    encodings_path = '/home/neelm/SAEProteinMPNN/evaluation/created_data/encodings/' + SAE_type + '_' + model + '/output_' + model + '_' + str(layer) + '.pkl'
 
-# Mask 90% of data ~430,000 -> ~43,000 to make clustering easier (0.1 cluster mask level)
-np.random.seed(0)
-mask = np.random.rand(encodings.shape[0]) < cluster_mask_level
-encodings = encodings.iloc[mask, :]
+    # Read and format pkl files
+    dfs = []
+    with open(encodings_path, "rb") as f:
+        while True:
+            try:
+                dfs.append(pickle.load(f))
+            except EOFError:
+                break
+        encodings = pd.concat(dfs, ignore_index=True)
+    dfs = []
+    np.random.seed(0)
+    mask = np.random.rand(encodings.shape[0]) < mask_lvl
+    encodings = encodings.iloc[mask, :]
+
+    if load_dssp:
+        dssp = pd.read_csv(dssp_path)
+        print("read data")
+        # Filter data to make sure there are entries for both sets of data and remove duplicates
+        encodings = encodings.drop_duplicates(subset='identifier')
+        dssp = dssp.drop_duplicates(subset='identifier')
+        encodings = encodings.dropna() # Drop rows with NA values
+        dssp = dssp.dropna()
+        encodings['identifier'] = encodings['identifier'].astype(str).str.strip().str.lower()
+        dssp['identifier'] = dssp['identifier'].astype(str).str.strip().str.lower()
+        matching_ids = set(encodings['identifier']) & set(dssp['identifier'])
+        encodings = encodings[encodings['identifier'].isin(matching_ids)]
+        encodings = encodings.sort_values('identifier').reset_index(drop=True)
+        dssp = dssp[dssp['identifier'].isin(matching_ids)]
+        dssp = dssp.sort_values('identifier').reset_index(drop=True)
+        print("filtered data")
+    else:
+        dssp = None
+
+    # Isolate sample labels and set up mask (default 10% of samples -> ~43,000 samples)
+    res_labels = encodings.iloc[:, 0]
+    encodings = encodings.iloc[:, 1:]
+    print(f'{res_labels.shape[0]} samples')
+    
+    print(f'{res_labels.shape[0]} samples')
+    n_dims = encodings.shape[1]
+    print(f'{n_dims} dimensions')
+
+    return encodings, res_labels, n_dims, dssp
+
+encodings, res_labels, n_dims, dssp = load_data(SAE_type, model, layer, cluster_mask_level)
+
 print("Encoding data shape after filtering", encodings.shape)
 
 X = StandardScaler().fit_transform(encodings)
-kmeans = KMeans(n_clusters=25).fit(X)
-labels = kmeans.lables_
+#kmeans = KMeans(n_clusters=25).fit(X)
+#labels = kmeans.labels_
 print("kmeans done")
 
+
+# Compare encodings to IDP encodings
 '''
 idp_encodings_path = f'../created_data/encodings/idp_{SAE_type}_{model}/output_{model}_{layer}.pkl'
 idp_dfs = []
@@ -80,12 +114,26 @@ tsne_graph = tsne.fit_transform(X)
 
 fig = plt.figure()
 ax = fig.add_subplot()
-ax.scatter(tsne_graph[:, 0], tsne_graph[:, 1], c=labels)
+#for label in []#np.unique(dssp['sec_struct']):
+
+mask = (dssp['sec_struct'] == 'H') + (dssp['sec_struct'] == 'G') + (dssp['sec_struct'] == 'I')
+ax.scatter(tsne_graph[:, 0][mask], tsne_graph[:, 1][mask], label='Helix')
+
+mask = (dssp['sec_struct'] == 'E')
+ax.scatter(tsne_graph[:, 0][mask], tsne_graph[:, 1][mask], label='Beta Strand')
+
+
+mask = (dssp['sec_struct'] == 'B') + (dssp['sec_struct'] == 'T') + (dssp['sec_struct'] == 'S') + (dssp['sec_struct'] == '-')
+ax.scatter(tsne_graph[:, 0][mask], tsne_graph[:, 1][mask], label='Turn or Bend')
+
+#ax.scatter(tsne_graph[:, 0], tsne_graph[:, 1], label=dssp['sec_struct'])
 ax.set_title(f"SAE with {expansion*128} Neurons: Layer {layer+1}")
 ax.set_xlabel('tSNE Dimension 1')
 ax.set_ylabel('tSNE Dimension 2')
-plt.savefig(f'idp tSNE reduction with kmeans for {model} layer{layer}')
+ax.legend(title='Secondary Structure', loc='best')
+plt.savefig(f'tSNE reduction with sec_struct for {model} layer{layer}')
 plt.show()
+
 
 if None:#args.show_img:
     # Get distances for each point to its cluster centroid and return k closest points

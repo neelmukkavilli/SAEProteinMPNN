@@ -10,56 +10,53 @@ import matplotlib.pyplot as plt
 from sklearn import metrics
 import pickle
 
-SAE_type = 'node'
-model = 'log17_exp2'  # ex: dense, log17_exp2
-exp_size = 2
-layer = 2 # 0-indexed
-mask_lvl = 0.1
 
-# Load feature data and encodings
-dssp_path = '/home/neelm/SAEProteinMPNN/evaluation/created_data/features/node_features.csv'
-encodings_path = '/home/neelm/SAEProteinMPNN/evaluation/created_data/encodings/' + SAE_type + '_' + model + '/output_' + model + '_' + str(layer) + '.pkl'
-#encodings = pl.read_csv(encodings_path).to_pandas()
+def load_data(SAE_type, model, layer, mask):
 
-# Read and format pkl files
-dfs = []
-with open(encodings_path, "rb") as f:
-    while True:
-        try:
-            dfs.append(pickle.load(f))
-        except EOFError:
-            break
-    encodings = pd.concat(dfs, ignore_index=True)
+    # Load feature data and encodings
+    dssp_path = '/home/neelm/SAEProteinMPNN/evaluation/created_data/features/node_features.csv'
+    encodings_path = '/home/neelm/SAEProteinMPNN/evaluation/created_data/encodings/' + SAE_type + '_' + model + '/output_' + model + '_' + str(layer) + '.pkl'
 
-dssp = pd.read_csv(dssp_path)
-print("read data")
-# Filter data to make sure there are entries for both sets of data and remove duplicates
-encodings = encodings.drop_duplicates(subset='identifier')
-dssp = dssp.drop_duplicates(subset='identifier')
-encodings = encodings.dropna() # Drop rows with NA values
-dssp = dssp.dropna()
-encodings['identifier'] = encodings['identifier'].astype(str).str.strip().str.lower()
-dssp['identifier'] = dssp['identifier'].astype(str).str.strip().str.lower()
-matching_ids = set(encodings['identifier']) & set(dssp['identifier'])
-encodings = encodings[encodings['identifier'].isin(matching_ids)]
-encodings = encodings.sort_values('identifier').reset_index(drop=True)
-dssp = dssp[dssp['identifier'].isin(matching_ids)]
-dssp = dssp.sort_values('identifier').reset_index(drop=True)
-print("filtered data")
+    # Read and format pkl files
+    dfs = []
+    with open(encodings_path, "rb") as f:
+        while True:
+            try:
+                dfs.append(pickle.load(f))
+            except EOFError:
+                break
+        encodings = pd.concat(dfs, ignore_index=True)
 
-# Isolate sample labels and set up mask (default 10% of samples -> ~43,000 samples)
-res_labels = encodings.iloc[:, 0]
-print(f'{res_labels.shape[0]} samples')
-encodings=encodings.iloc[:, 1:]
-np.random.seed(0)
-mask = np.random.rand(encodings.shape[0]) < mask_lvl
-encodings = encodings.iloc[mask, :]
-dssp = dssp.iloc[mask, :]
-res_labels = res_labels.iloc[mask]
-print(f'{res_labels.shape[0]} samples')
-n_dims = encodings.shape[1]
-print(f'{n_dims} dimensions')
+    dssp = pd.read_csv(dssp_path)
+    print("read data")
+    # Filter data to make sure there are entries for both sets of data and remove duplicates
+    encodings = encodings.drop_duplicates(subset='identifier')
+    dssp = dssp.drop_duplicates(subset='identifier')
+    encodings = encodings.dropna() # Drop rows with NA values
+    dssp = dssp.dropna()
+    encodings['identifier'] = encodings['identifier'].astype(str).str.strip().str.lower()
+    dssp['identifier'] = dssp['identifier'].astype(str).str.strip().str.lower()
+    matching_ids = set(encodings['identifier']) & set(dssp['identifier'])
+    encodings = encodings[encodings['identifier'].isin(matching_ids)]
+    encodings = encodings.sort_values('identifier').reset_index(drop=True)
+    dssp = dssp[dssp['identifier'].isin(matching_ids)]
+    dssp = dssp.sort_values('identifier').reset_index(drop=True)
+    print("filtered data")
 
+    # Isolate sample labels and set up mask (default 10% of samples -> ~43,000 samples)
+    res_labels = encodings.iloc[:, 0]
+    print(f'{res_labels.shape[0]} samples')
+    encodings=encodings.iloc[:, 1:]
+    np.random.seed(0)
+    mask = np.random.rand(encodings.shape[0]) < mask_lvl
+    encodings = encodings.iloc[mask, :]
+    dssp = dssp.iloc[mask, :]
+    res_labels = res_labels.iloc[mask]
+    print(f'{res_labels.shape[0]} samples')
+    n_dims = encodings.shape[1]
+    print(f'{n_dims} dimensions')
+
+    return encodings, dssp, res_labels, n_dims
 # ROC AUC Thresh = 0.7
 # Pearson Thresh = 0.5
 
@@ -265,7 +262,6 @@ def categorize_AA(feature_df):
     #feature_df['Function'] = feature_df['residue'].map(residue_to_function)
     #feature_df['Shape'] = feature_df['residue'].map(residue_to_shape)
 
-categorize_AA(dssp)
 
 def count_categorical(features, base_feature, n_dims, encodings, bar_labels, bar_heights, sum=True):
     one_hot = pd.get_dummies(features[base_feature])
@@ -308,7 +304,6 @@ def count_sig_dims(n_dims, encodings, features):
 
     return bar_labels, bar_heights
 
-bar_labels, bar_heights = count_sig_dims(n_dims, encodings, dssp)
 
 def clean_bar_graph(labels, heights):
     rename = {
@@ -363,6 +358,19 @@ def clean_bar_graph(labels, heights):
     plt.savefig(f"{model} layer {layer+1} bar plot of feature correlations.png", bbox_inches='tight', dpi=300)
     plt.show()
     plt.clf()
+
+data_dict = {}
+SAE_type = 'node'
+models = ["dense", "log20_exp1", "log17_exp2", "log18_exp4", "log19_exp8"]
+exp_size = 1
+layer = 0 # 0-indexed
+mask_lvl = 0.1
+
+for model in models:
+    encodings, dssp, res_labels, n_dims = load_data(SAE_type, model, layer, mask_lvl)
+    categorize_AA(dssp)
+    bar_labels, bar_heights = count_sig_dims(n_dims, encodings, dssp)
+    dict[model] = bar_heights
 
 clean_bar_graph(bar_labels, bar_heights)
 

@@ -1,0 +1,8 @@
+4 Structures were selected from DisProt with high "Alphafold Very Low confidence content" and high "Disorder content"
+
+UniProtID: Q6UNL8, Disorder Content: 100.00% , Alphafold Very Low confidence content: 100.00%
+UniProtID: P27058, Disorder Content: 100.00% , Alphafold Very Low confidence content: 84.50%
+UniProtID: P04985, Disorder Content: 100.00% , Alphafold Very Low confidence content: 97.32%
+UniProtID: Q2GI62, Disorder Content: 14.60% , Alphafold Very Low confidence content: 100.00%
+
+All structures were downloaded from the AlphaFold DB and Q6UNL8 was converted from cif to pdb format
