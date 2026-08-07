@@ -1,8 +1,5 @@
 import MDAnalysis
 import numpy as np
-from MDAnalysis.analysis.hydrogenbonds.hbond_analysis import HydrogenBondAnalysis as HBA
-#from pdbfixer import PDBFixer
-#from openmm.app import PDBFile
 from MDAnalysis.analysis import contacts
 from pathlib import Path
 from natsort import natsorted
@@ -16,8 +13,6 @@ warnings.filterwarnings(
     "ignore", 
     category=UserWarning
 )
-
-main_dict = {}
 
 # For each PDB first MDAnalysis is used to collect spatial information
 # Features stored in dict with keys "{pdb_name}{chain_ID}{resID (cannonical PDB number)}" i.e. 1ab8B1072
@@ -201,23 +196,19 @@ input_pdb_dir = Path('../inputs')
 pdb_files = list(input_pdb_dir.glob('*.pdb'))
 pdb_files = np.array([Path(p) for p in natsorted([str(p) for p in pdb_files])])
 np.random.seed(0)
-#mask = np.random.rand(len(pdb_files)) > 0
-pdb_files = pdb_files#[mask]
-#print(len(pdb_files))
-#print(set(pdb_files))
-print(len(set(pdb_files)))
-#addition += 1
-pdb_files = pdb_files  # Limit to first few PDB files for testing
 main_df = pd.DataFrame()
 for pdb_file in pdb_files:
-    #find_node_features(str(pdb_file))
+    main_dict = {}
     print("Working on: " + str(pdb_file)[-8:])
     run_dssp(pdb_file)
-    #column_names = ['bfactor', 'xy', 'xz', 'yz', 'philic', 'phobic', 'SB'] + list(range(16))
-    column_names = ['ss_end']#['residue', 'sec_struct', 'ASA', 'phi', 'psi', 'bfactor', 'xy', 'xz', 'yz', 'philic', 'phobic', 'SB'] + list(range(16)) + ['ss_edge']
-    df = pd.DataFrame(main_dict).T[column_names]
-    main_df = pd.concat([main_df, df], axis=0)
+    column_names = ['ss_end']
+    if main_dict != {}:
+        df = pd.DataFrame(main_dict).T[column_names]
+        main_df = pd.concat([main_df, df], axis=0)
+    else:
+        continue
 
+main_df.index.name = 'indentifier'
 # Normalization steps
 def norm_angles(arr):
     #arr = arr.apply(lambda x: (x + 360) % 360 if pd.notnull(x) else x)

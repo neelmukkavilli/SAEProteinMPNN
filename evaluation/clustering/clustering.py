@@ -16,12 +16,11 @@ import pickle
 expansion = 2
 model = 'log17_exp2'  #ex: dense, log17_exp2
 SAE_type = 'node'
-layer = 2 # 0-indexed
+layer = 1 # 0-indexed
 cluster_mask_level = 0.01
 
 
 def load_data(SAE_type, model, layer, mask_lvl, load_dssp=True):
-
     # Load feature data and encodings
     dssp_path = '/home/neelm/SAEProteinMPNN/evaluation/created_data/features/node_features.csv'
     encodings_path = '/home/neelm/SAEProteinMPNN/evaluation/created_data/encodings/' + SAE_type + '_' + model + '/output_' + model + '_' + str(layer) + '.pkl'
@@ -63,8 +62,6 @@ def load_data(SAE_type, model, layer, mask_lvl, load_dssp=True):
     res_labels = encodings.iloc[:, 0]
     encodings = encodings.iloc[:, 1:]
     print(f'{res_labels.shape[0]} samples')
-    
-    print(f'{res_labels.shape[0]} samples')
     n_dims = encodings.shape[1]
     print(f'{n_dims} dimensions')
 
@@ -75,13 +72,8 @@ encodings, res_labels, n_dims, dssp = load_data(SAE_type, model, layer, cluster_
 print("Encoding data shape after filtering", encodings.shape)
 
 X = StandardScaler().fit_transform(encodings)
-#kmeans = KMeans(n_clusters=25).fit(X)
-#labels = kmeans.labels_
-print("kmeans done")
-
 
 # Compare encodings to IDP encodings
-'''
 idp_encodings_path = f'../created_data/encodings/idp_{SAE_type}_{model}/output_{model}_{layer}.pkl'
 idp_dfs = []
 with open(idp_encodings_path, "rb") as f:
@@ -92,7 +84,7 @@ with open(idp_encodings_path, "rb") as f:
             break
     idp_encodings = pd.concat(idp_dfs, ignore_index=True)
 # Filter out incomplete or missing rows
-print("Encoding data shape before filtering", idp_encodings.shape)
+print("IDP Encoding data shape before filtering", idp_encodings.shape)
 idp_encodings = idp_encodings.dropna(axis='index')
 idp_encodings = idp_encodings.sort_values('identifier').reset_index(drop=True)
 
@@ -103,35 +95,40 @@ idp_encodings = idp_encodings.iloc[:, 1:]
 np.random.seed(0)
 mask = np.random.rand(idp_encodings.shape[0]) < 0.5
 idp_encodings = idp_encodings.iloc[mask, :]
-print("Encoding data shape after filtering", idp_encodings.shape)
+print("IDP Encoding data shape after filtering", idp_encodings.shape)
 X2 = StandardScaler().fit_transform(idp_encodings)
 labels = [0]*encodings.shape[0] + [1]*idp_encodings.shape[0]
 X = np.vstack((X, X2))
-'''
 
 tsne = TSNE(n_components=2, random_state=0)
 tsne_graph = tsne.fit_transform(X)
+tsne_idp_graph = tsne.fit_transform(X2)
+
 
 fig = plt.figure()
 ax = fig.add_subplot()
 #for label in []#np.unique(dssp['sec_struct']):
 
-mask = (dssp['sec_struct'] == 'H') + (dssp['sec_struct'] == 'G') + (dssp['sec_struct'] == 'I')
-ax.scatter(tsne_graph[:, 0][mask], tsne_graph[:, 1][mask], label='Helix')
+#mask = (dssp['sec_struct'] == 'H') + (dssp['sec_struct'] == 'G') + (dssp['sec_struct'] == 'I')
+#ax.scatter(tsne_graph[:, 0][mask], tsne_graph[:, 1][mask], label='Helix')
 
-mask = (dssp['sec_struct'] == 'E')
-ax.scatter(tsne_graph[:, 0][mask], tsne_graph[:, 1][mask], label='Beta Strand')
+#mask = (dssp['sec_struct'] == 'E')
+#ax.scatter(tsne_graph[:, 0][mask], tsne_graph[:, 1][mask], label='Beta Strand')
 
 
-mask = (dssp['sec_struct'] == 'B') + (dssp['sec_struct'] == 'T') + (dssp['sec_struct'] == 'S') + (dssp['sec_struct'] == '-')
-ax.scatter(tsne_graph[:, 0][mask], tsne_graph[:, 1][mask], label='Turn or Bend')
+#mask = (dssp['sec_struct'] == 'B') + (dssp['sec_struct'] == 'T') + (dssp['sec_struct'] == 'S') + (dssp['sec_struct'] == '-')
+#ax.scatter(tsne_graph[:, 0][mask], tsne_graph[:, 1][mask], label='Turn or Bend')
 
 #ax.scatter(tsne_graph[:, 0], tsne_graph[:, 1], label=dssp['sec_struct'])
+
+ax.scatter(tsne_graph[:4304, 0], tsne_graph[:4304, 1], label='Ordinary Residues')
+ax.scatter(tsne_graph[4304:, 0], tsne_graph[4304:, 1], label='IDP Residues')
+
 ax.set_title(f"SAE with {expansion*128} Neurons: Layer {layer+1}")
 ax.set_xlabel('tSNE Dimension 1')
 ax.set_ylabel('tSNE Dimension 2')
-ax.legend(title='Secondary Structure', loc='best')
-plt.savefig(f'tSNE reduction with sec_struct for {model} layer{layer}')
+ax.legend()#title='Secondary Structure', loc='best')
+plt.savefig(f'IDP tSNE reduction for {model} layer{layer}')#tSNE reduction with sec_struct for {model} layer{layer}')
 plt.show()
 
 

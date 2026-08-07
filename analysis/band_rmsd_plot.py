@@ -1,21 +1,105 @@
-import MDAnalysis as mda
-from MDAnalysis.analysis import rms, align
 import matplotlib.pyplot as plt
 from pathlib import Path
 import numpy as np
 import pickle
 import pandas as pd
-
-#protein_folder = "mpnn_md/enh_mpnn_4"
-#protein = 'scfv_native'
-temp = "298"
+from scipy import stats
 
 #folder = Path(f"/WAVE/bio/MD/{protein_folder}")
 
 
-rmsd_results = {}
-data = {}
+#rmsd_results = {}
+#data = {}
 
+def load_rmsd(rmsd_data, protein_folder, protein, temp, method="min_max"):
+    rmsd_df = pd.read_pickle(f"rmsd_data//{protein}/rmsd_{temp}.pkl")
+    time = rmsd_df.index.values
+    if method == "min_max":
+        mean_rmsd = rmsd_df.mean(axis=1).rolling(25, center=True).mean()
+        max_rmsd = rmsd_df.max(axis=1).rolling(25, center=True).mean()
+        min_rmsd = rmsd_df.min(axis=1).rolling(25, center=True).mean()
+        rmsd_data[protein] = (mean_rmsd, max_rmsd, min_rmsd)
+    elif method == "avg":
+        mean_rmsd = rmsd_df.mean(axis=1).rolling(25, center=True).mean()
+        max_rmsd = mean_rmsd
+        min_rmsd = mean_rmsd
+    else:
+        raise ValueError("Invalid method. Choose 'min_max' or 'avg'.")
+    return time, rmsd_data
+
+def graph_rmsd(time, rmsd_data, proteins, method="min_max"):
+    fig, ax = plt.subplots()
+    for prot in proteins:
+        mean_rmsd, max_rmsd, min_rmsd = rmsd_data[prot]
+        plt.plot(time, mean_rmsd, '-', label=f'{values[prot]} Mean RMSD')
+        plt.fill_between(time, min_rmsd, max_rmsd, alpha=0.3)
+    plt.xlabel('Time (ns)')
+    plt.ylabel(r'C$\alpha$ RMSD ($\AA$)')
+    ax.set_xlim(left=0, right=100)
+    ax.set_ylim(bottom=0, top=values[temp])
+    plt.title(f'{values[protein_folder][0]} Protein RMSD at {temp} K')
+    plt.legend(loc='upper right')
+    plt.savefig(f'rmsd_band_{values[protein_folder][0]}_{temp}_plot.png', dpi=300)
+    plt.show()
+
+# Dict to make creating plots easier
+values = {
+    'scfv_baseline': ('Baseline', ['scfv_native', 'scfv_evo', 'scfv_mpnn']),
+    'scfv_sae': ('Candidate', ['scfv_mod0', 'scfv_mod05', 'scfv_mod1', 'scfv_mod2']),
+    'scfv_native': 'Native',
+    'scfv_evo': 'GeoEvo',
+    'scfv_mpnn': 'ProteinMPNN',
+    'scfv_mod0': 'SAE Mod=0',
+    'scfv_mod05': 'SAE Mod=0.5',
+    'scfv_mod1': 'SAE Mod=1',
+    'scfv_mod2': 'SAE Mod=2',
+    '298': 10, # Y-axis limit for temperatures
+    '373': 10,
+    '433': 25
+}
+
+#protein_folder = "scfv_baseline"
+#temp = "373"
+#method = "min_max"
+#rmsd_data = {}
+#for prot in values[protein_folder][1]:
+#    time, rmsd_data = load_rmsd(rmsd_data, protein_folder, prot, temp, method="min_max")
+#graph_rmsd(time, rmsd_data, values[protein_folder][1], method=method)
+
+
+
+#print(list(values.keys()))
+def calc_rmsf(temp, rmsf_data):
+    for prot in list(values.keys())[2:8]:
+        rmsd_df = pd.read_pickle(f"rmsd_data/{prot}/rmsd_{temp}.pkl")
+        mean_rmsf = rmsd_df.mean().mean()
+        se = stats.sem(rmsd_df.mean())
+        confidence = 0.95
+        n = 500
+        dof = n - 1
+        confidence_interval = stats.t.interval(confidence, dof, mean_rmsf, se)
+        err = (confidence_interval[1] - confidence_interval[0])/2
+        rmsf_data[values[prot]] = (mean_rmsf, err)
+        print((mean_rmsf, err))
+    return rmsf_data
+
+def graph_rmsf(rmsf_data):
+    heights = [tup[0] for tup in rmsf_data.values()]
+    err = [tup[1] for tup in rmsf_data.values()]
+    fig, ax = plt.subplots(figsize=(9, 6))
+    plt.bar(rmsf_data.keys(), heights, yerr=err, capsize=4)
+    plt.ylabel(r"Mean C$\alpha$ RMSF")
+    plt.title(f"Mean RMSF for scFv Proteins at {temp} K")
+    plt.savefig(f'rmsf_bar_plot_{temp}.png', dpi=300)
+    plt.show()
+
+temp = 433
+rmsf_data = {}
+rmsf_data = calc_rmsf(temp, rmsf_data)
+print([val[0] for val in rmsf_data.values()])
+graph_rmsf(rmsf_data)
+
+'''
 for prot in ['scfv_native', 'scfv_mod0', 'scfv_mod05', 'scfv_mod1', 'scfv_mod2']:
     for i in range(1, 6):
         if prot == 'scfv_native':
@@ -60,7 +144,7 @@ ax.plot(x_range, data['scfv_mod2'][0], '-', color='darkorange', label='SAE mod=2
 
 
 plt.xlabel('Time (ns)')
-plt.ylabel(r'C$\alpha$ RMSD ($\AA$)')
 plt.title(f'Modified Protein RMSD at {temp} K')
 plt.legend(loc='upper right')
 plt.savefig(f'mod_rmsd_band_allprots_{temp}_plot.png', dpi=300)
+'''

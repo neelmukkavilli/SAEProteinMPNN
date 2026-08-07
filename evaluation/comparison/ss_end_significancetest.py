@@ -17,48 +17,56 @@ layer = 2 # 0-indexed
 mask_lvl = 0.01
 
 # Load feature data and encodings
-dssp_path = '/home/neelm/SAEProteinMPNN/evaluation/created_data/features/ss_end_node_features.csv'
-encodings_path = '/home/neelm/SAEProteinMPNN/evaluation/created_data/encodings/' + SAE_type + '_' + model + '/output_' + model + '_' + str(layer) + '.pkl'
-#encodings = pl.read_csv(encodings_path).to_pandas()
+def load_data(SAE_type, model, layer, mask_lvl):
 
-# Read and format pkl files
-dfs = []
-with open(encodings_path, "rb") as f:
-    while True:
-        try:
-            dfs.append(pickle.load(f))
-        except EOFError:
-            break
-    encodings = pd.concat(dfs, ignore_index=True)
+    # Load feature data and encodings
+    dssp_path = '/home/neelm/SAEProteinMPNN/evaluation/created_data/features/node_features.csv'
+    encodings_path = '/home/neelm/SAEProteinMPNN/evaluation/created_data/encodings/' + SAE_type + '_' + model + '/output_' + model + '_' + str(layer) + '.pkl'
 
-dssp = pd.read_csv(dssp_path)
-print("read data")
-# Filter data to make sure there are entries for both sets of data and remove duplicates
-encodings = encodings.drop_duplicates(subset='identifier')
-dssp = dssp.drop_duplicates(subset='identifier')
-encodings = encodings.dropna() # Drop rows with NA values
-dssp = dssp.dropna()
-encodings['identifier'] = encodings['identifier'].astype(str).str.strip().str.lower()
-dssp['identifier'] = dssp['identifier'].astype(str).str.strip().str.lower()
-matching_ids = set(encodings['identifier']) & set(dssp['identifier'])
-encodings = encodings[encodings['identifier'].isin(matching_ids)]
-encodings = encodings.sort_values('identifier').reset_index(drop=True)
-dssp = dssp[dssp['identifier'].isin(matching_ids)]
-dssp = dssp.sort_values('identifier').reset_index(drop=True)
-print("filtered data")
+    # Read and format pkl files
+    dfs = []
+    with open(encodings_path, "rb") as f:
+        while True:
+            try:
+                dfs.append(pickle.load(f))
+            except EOFError:
+                break
+        encodings = pd.concat(dfs, ignore_index=True)
+    dfs = []
+    np.random.seed(0)
+    mask = np.random.rand(encodings.shape[0]) < mask_lvl
+    encodings = encodings.iloc[mask, :]
+    print('read encodings', encodings.shape)
+    dssp = pd.read_csv(dssp_path, usecols=['identifier', 'sec_struct'])
+    print("read data")
+    # Filter data to make sure there are entries for both sets of data and remove duplicates
+    encodings = encodings.drop_duplicates(subset='identifier')
+    dssp = dssp.drop_duplicates(subset='identifier')
+    encodings = encodings.dropna() # Drop rows with NA values
+    dssp = dssp.dropna()
+    encodings['identifier'] = encodings['identifier'].astype(str).str.strip().str.lower()
+    dssp['identifier'] = dssp['identifier'].astype(str).str.strip().str.lower()
+    matching_ids = set(encodings['identifier']) & set(dssp['identifier'])
+    encodings = encodings[encodings['identifier'].isin(matching_ids)]
+    encodings = encodings.sort_values('identifier').reset_index(drop=True)
+    dssp = dssp[dssp['identifier'].isin(matching_ids)]
+    dssp = dssp.sort_values('identifier').reset_index(drop=True)
+    print("filtered data")
 
-# Isolate sample labels and set up mask (default 10% of samples -> ~43,000 samples)
-res_labels = encodings.iloc[:, 0]
-print(f'{res_labels.shape[0]} samples')
-encodings=encodings.iloc[:, 1:]
-np.random.seed(0)
-mask = np.random.rand(encodings.shape[0]) < mask_lvl
-encodings = encodings.iloc[mask, :]
-dssp = dssp.iloc[mask, :]
-res_labels = res_labels.iloc[mask]
-print(f'{res_labels.shape[0]} samples')
-n_dims = encodings.shape[1]
-print(f'{n_dims} dimensions')
+    # Isolate sample labels and set up mask (default 10% of samples -> ~43,000 samples)
+    res_labels = encodings.iloc[:, 0]
+    encodings = encodings.iloc[:, 1:]
+    print(f'{res_labels.shape[0]} samples')
+    
+    #dssp = dssp.iloc[mask, :]
+    #res_labels = res_labels.iloc[mask]
+    print(f'{res_labels.shape[0]} samples')
+    n_dims = encodings.shape[1]
+    print(f'{n_dims} dimensions')
+
+    return encodings, dssp, res_labels, n_dims
+
+encodings, dssp, res_labels, n_dims = load_data(SAE_type, model, layer, mask_lvl)
 
 # ROC AUC Thresh = 0.7
 # Pearson Thresh = 0.5
