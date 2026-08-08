@@ -1,4 +1,4 @@
-input_dir="idp_inputs"
+input_dir="inputs"
 output_dir="../outputs/training_test_output"
 SAE_type="node"
 model="log17_exp2"

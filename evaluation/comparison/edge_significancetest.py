@@ -1,14 +1,8 @@
 import numpy as np
 import pandas as pd
-import csv
 import scipy.stats as sci
 import sklearn
-from sklearn.metrics import average_precision_score
-from sklearn.metrics import matthews_corrcoef
-from sklearn.feature_selection import mutual_info_regression, mutual_info_classif
 import matplotlib.pyplot as plt
-#import polars as pl
-from sklearn import metrics
 import pickle
 import sys
 

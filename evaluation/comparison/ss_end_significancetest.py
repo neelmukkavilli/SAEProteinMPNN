@@ -20,8 +20,8 @@ mask_lvl = 0.01
 def load_data(SAE_type, model, layer, mask_lvl):
 
     # Load feature data and encodings
-    dssp_path = '/home/neelm/SAEProteinMPNN/evaluation/created_data/features/node_features.csv'
-    encodings_path = '/home/neelm/SAEProteinMPNN/evaluation/created_data/encodings/' + SAE_type + '_' + model + '/output_' + model + '_' + str(layer) + '.pkl'
+    dssp_path = '../created_data/features/node_features.csv'
+    encodings_path = '../created_data/encodings/' + SAE_type + '_' + model + '/output_' + model + '_' + str(layer) + '.pkl'
 
     # Read and format pkl files
     dfs = []

@@ -1,7 +1,5 @@
 #!/bin/bash
 
-
-
 python ../protein_mpnn_run.py \
         --SAE_level 'node' \
         --reinsert_SAE False \

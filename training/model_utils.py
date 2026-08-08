@@ -159,18 +159,6 @@ def loss_nll(S, log_probs, mask):
     loss_av = torch.sum(loss * mask) / torch.sum(mask)
     return loss, loss_av, true_false
 
-def loss_smoothed(S, log_probs, mask, weight=0.1):
-    """ Negative log probabilities """
-    S_onehot = torch.nn.functional.one_hot(S, 21).float()
-
-    # Label smoothing
-    S_onehot = S_onehot + weight / float(S_onehot.size(-1))
-    S_onehot = S_onehot / S_onehot.sum(-1, keepdim=True)
-
-    loss = -(S_onehot * log_probs).sum(-1)
-    loss_av = torch.sum(loss * mask) / 2000.0 #fixed 
-    return loss, loss_av
-
 def SAE_loss(model, sparse_weight, mask):
         # Now calculates all losses but only prints the last one
         total_loss = 0
@@ -748,7 +736,6 @@ class ProteinMPNN(nn.Module):
             
         return log_probs, self.input_act[2], self.encoded_act[2], self.output_act[2]
         
-
 class NoamOpt:
     "Optim wrapper that implements rate."
     def __init__(self, model_size, factor, warmup, optimizer, step):
@@ -784,7 +771,3 @@ class NoamOpt:
     def zero_grad(self):
         self.optimizer.zero_grad()
 
-def get_std_opt(parameters, d_model, step):
-    return NoamOpt(
-        d_model, 2, 4000, torch.optim.Adam(parameters, lr=0, betas=(0.9, 0.98), eps=1e-9), step
-    )

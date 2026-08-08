@@ -1,15 +1,9 @@
 import MDAnalysis
 import numpy as np
-from MDAnalysis.analysis.hydrogenbonds.hbond_analysis import HydrogenBondAnalysis as HBA
-#from pdbfixer import PDBFixer
-#from openmm.app import PDBFile
-from MDAnalysis.analysis import contacts
 from pathlib import Path
 from natsort import natsorted
-from Bio.PDB import PDBParser, DSSP, PPBuilder
-import Bio.PDB.Polypeptide as polypep
+from Bio.PDB import PDBParser, DSSP
 import pandas as pd
-import subprocess
 import warnings
 
 warnings.filterwarnings(
@@ -99,35 +93,6 @@ def count_distance_bins(sel1, sel2, dmin, dmax, rbf, pdb_name): # Returns main_d
                 main_dict[identifier][dist_bin] = 1
             else:
                 main_dict[identifier][dist_bin] += 1
-'''
-def count_HB(pdb_path): # Returns dict {residue: number of h bonds either acceptor or donor, res1: a, res2: b,...}}
-    fixer = PDBFixer(pdb_path)
-    fixer.findMissingResidues()
-    fixer.findMissingAtoms()
-    fixer.addMissingHydrogens(pH=7.0)
-    PDBFile.writeFile(fixer.topology, fixer.positions, open('output_h.pdb', 'w'), keepIds=True)
-    u = MDAnalysis.Universe('output_h.pdb')
-    hbonds = HBA(universe = u,
-                 donors_sel = 'protein and name N NE2 NZ ND2 NE1',
-                 hydrogens_sel = 'protein and name H*',
-                 acceptors_sel = 'protein and name O OD1 OE1 OG OG1 OH')
-    
-    hbonds.run()
-    hbond_count = hbonds.count_by_ids()
-    hbond_count = np.delete(hbond_count, [2, 3], axis=1)
-    #hbond_count_acceptor = np.zeros(hbond_count.shape[0])
-    for i in range(hbond_count.shape[0]):
-        for j in range(2):
-            hbond_count[i, j] = (u.atoms[hbond_count[i, j]]).residue.resnum
-    print(hbond_count.flatten()[:20])
-    print(hbond_count.shape)
-    HBcount_results = {}
-    for res in hbond_count.flatten():
-        if res not in HBcount_results:
-            HBcount_results[int(res)] = 1
-        else:
-            HBcount_results[int(res)] += 1
-'''
 
 def find_node_features(pdb_path):
     pdb_name = pdb_path[-8:-4]
@@ -205,43 +170,26 @@ def run_dssp(pdb_path):
 input_pdb_dir = Path('../inputs')
 pdb_files = list(input_pdb_dir.glob('*.pdb'))
 pdb_files = np.array([Path(p) for p in natsorted([str(p) for p in pdb_files])])
+# Limit to subset of PDB files for testing
 np.random.seed(0)
-#mask = np.random.rand(len(pdb_files)) > 0
+#mask = np.random.rand(len(pdb_files)) > 0.01
 pdb_files = pdb_files#[mask]
-#print(len(pdb_files))
-#print(set(pdb_files))
-print(len(set(pdb_files)))
-#addition += 1
-pdb_files = pdb_files  # Limit to first few PDB files for testing
+print(f'Finding features for {len(set(pdb_files))} PDB files')
 main_df = pd.DataFrame()
 for pdb_file in pdb_files:
     find_node_features(str(pdb_file))
     print("Working on: " + str(pdb_file)[-8:])
     run_dssp(pdb_file)
-    #column_names = ['bfactor', 'xy', 'xz', 'yz', 'philic', 'phobic', 'SB'] + list(range(16))
     column_names = ['residue', 'sec_struct', 'ASA', 'phi', 'psi', 'bfactor', 'xy', 'xz', 'yz', 'philic', 'phobic', 'SB'] + list(range(16)) + ['ss_edge']
     df = pd.DataFrame(main_dict).T[column_names]
     main_df = pd.concat([main_df, df], axis=0)
 
 # Normalization steps
 def norm_angles(arr):
-    #arr = arr.apply(lambda x: (x + 360) % 360 if pd.notnull(x) else x)
     arr = pd.to_numeric(arr, errors='coerce')
     arr = (arr + 360) % 360
     arr = np.where(arr > 180, 360 - arr, arr)
     return pd.Series(arr).round(5)
-
-def norm_vals(arr):
-    arr = pd.to_numeric(arr, errors='coerce')
-    min_val = arr.min(skipna=True)
-    max_val = arr.max(skipna=True)
-
-    if max_val != min_val:
-        normalized_col = (arr - min_val)/(max_val - min_val)
-    else:
-        normalized_col = (arr - min_val)
-
-    return normalized_col.round(5)
 
 arr = main_df['phi']
 norm_arr = norm_angles(arr)

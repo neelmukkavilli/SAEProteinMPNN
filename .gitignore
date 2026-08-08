@@ -128,47 +128,19 @@ dmypy.json
 # Pyre type checker
 .pyre/
 /evaluation/created_data/
-/evaluation/graphics/
-/evaluation/created_data/uniprot/out/
 /evaluation/data_labeling/uniprot/out/
-/evaluation/comparison/graphics/
 /evaluation/inputs/
-/evaluation/disregarded/
-/evaluation/encodings/
-/evaluation/input_test/
-/evaluation/old_files/
-/evaluation/decoderlogprob/lsample_proline_allres/
-/evaluation/decoderlogprob/prolinprob_test/
 /evaluation/.vscode/
 
-/training/oldfiles/
 /training/.vscode/
 /training/exp_020/model_weights/
 /training/pdb_2021aug02/
 /training/pdb_2021aug02_sample/
 
 /analysis/.vscode/
-/analysis/graphics/
 
 /imported_data/
 
-/sae_training/evaluation/created_data/
-/sae_training/evaluation/created_data/uniprot/out/
-/sae_training/evaluation/inputs/
-/sae_training/evaluation/disregarded/
-/sae_training/evaluation/encodings/
-/sae_training/evaluation/input_test/
-/sae_training/evaluation/old_files/
-/sae_training/evaluation/decoderlogprob/lsample_proline_allres/
-/sae_training/evaluation/decoderlogprob/prolinprob_test/
-/sae_training/evaluation/.vscode/
-
-/sae_training/training/oldfiles/
-/sae_training/training/.vscode/
-/sae_training/training/exp_020/model_weights/
-/sae_training/training/pdb_2021aug02/
-/sae_training/training/pdb_2021aug02_sample/
-/sae_training/analysis/graphics/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

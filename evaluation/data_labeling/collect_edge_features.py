@@ -1,6 +1,6 @@
 import numpy as np
-from protein_mpnn_utils_eval import tied_featurize, parse_PDB
-from protein_mpnn_utils_eval import StructureDatasetPDB
+from protein_mpnn_utils import tied_featurize, parse_PDB, _S_to_seq, StructureDatasetPDB
+from protein_mpnn_utils import CA_ProteinFeatures
 from pathlib import Path
 import torch
 import copy
@@ -35,34 +35,17 @@ def run_distance_collection(pdb_path):
     chain_id_dict[pdb_dict_list[0]['name']]= (designed_chain_list, fixed_chain_list)
 
     top_k = 48
-    def _dist(X, mask, eps=1E-6):
-            """ Pairwise euclidean distances """
-            # Convolutional network on NCHW
-            mask_2D = torch.unsqueeze(mask,1) * torch.unsqueeze(mask,2)
-            dX = torch.unsqueeze(X,1) - torch.unsqueeze(X,2)
-            D = mask_2D * torch.sqrt(torch.sum(dX**2, 3) + eps)
-
-            # Identify k nearest neighbors (including self)
-            D_max, _ = torch.max(D, -1, keepdim=True)
-            D_adjust = D + (1. - mask_2D) * D_max
-
-            D_neighbors, E_idx = torch.topk(D_adjust, top_k, dim=-1, largest=False)
-            mask_neighbors = gather_edges(mask_2D.unsqueeze(-1), E_idx)
-            return D_neighbors, E_idx, mask_neighbors
-
-    def gather_edges(edges, neighbor_idx):
-        # Features [B,N,N,C] at Neighbor indices [B,N,K] => Neighbor features [B,N,K,C]
-        neighbors = neighbor_idx.unsqueeze(-1).expand(-1, -1, -1, edges.size(-1))
-        edge_features = torch.gather(edges, 2, neighbors)
-        return edge_features
+    features = CA_ProteinFeatures(
+        edge_features=128,
+        node_features=128,
+        top_k=top_k)
 
     with torch.no_grad():
-            test_sum, test_weights = 0., 0.
-            for ix, protein in enumerate(dataset_valid):
-                batch_clones = [copy.deepcopy(protein) for i in range(BATCH_COPIES)]
-                X, S, mask, lengths, chain_M, chain_encoding_all, chain_list_list, visible_list_list, masked_list_list, masked_chain_length_list_list, chain_M_pos, omit_AA_mask, residue_idx, dihedral_mask, tied_pos_list_of_lists_list, pssm_coef, pssm_bias, pssm_log_odds_all, bias_by_res_all, tied_beta = tied_featurize(batch_clones, device, chain_id_dict, fixed_positions_dict, omit_AA_dict, tied_positions_dict, pssm_dict, bias_by_res_dict, ca_only=ca_only)
-                Ca = X[:,:,1,:]
-                D_neighbors, E_idx, mask_neighbors = _dist(Ca, mask)
+        for ix, protein in enumerate(dataset_valid):
+            batch_clones = [copy.deepcopy(protein) for i in range(BATCH_COPIES)]
+            X, S, mask, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, __annotations__ = tied_featurize(batch_clones, device, chain_id_dict, fixed_positions_dict, omit_AA_dict, tied_positions_dict, pssm_dict, bias_by_res_dict, ca_only=ca_only)
+            Ca = X[:,:,1,:]
+            D_neighbors, E_idx, _ = features._dist(Ca, mask)
 
     name = str(pdb_path)[-8:-4]
     labels = []
@@ -70,11 +53,6 @@ def run_distance_collection(pdb_path):
         for j in range(E_idx.shape[2]):
             labels.append(f'{name}_{E_idx[0,i,0]}-{E_idx[0,i,j]}')
     label_df = pd.DataFrame(labels, columns=['identifier'])    
-
-    def _S_to_seq(S):
-        alphabet = 'ACDEFGHIKLMNPQRSTVWYX'
-        seq = [alphabet[c] for c in S.tolist()[0]]
-        return seq
 
     dmin = 2 - 4/6
     dmax = 22 + 4/6
@@ -113,6 +91,7 @@ def run_distance_collection(pdb_path):
         else:
             pair_type = "XX"
         return pair_type
+    
     def res_type_pairs(E_idx, S):
         res_type_arr = np.empty((E_idx.shape[1], E_idx.shape[2]), dtype=object)
         seq = _S_to_seq(S)
@@ -130,7 +109,7 @@ def run_distance_collection(pdb_path):
     
     return pd.concat([label_df, df_distance_bins, df_contact_order, df_contact_type], axis=1).iloc[mask, :]
 
-input_pdb_dir = Path('/WAVE/bio/ML/SAE_train/SAEProteinMPNN/evaluation/inputs')
+input_pdb_dir = Path('../inputs')
 
 df = pd.DataFrame()
 
@@ -146,5 +125,4 @@ for pdb_file in pdb_files:
 
 with open(output, 'ab') as f:
     pickle.dump(df, f)
-#f.to_csv("test_edge_features.csv", index=False)
-print(f"✅ Edge data saved to edge_features.csv with {len(df)} rows.")
+print(f"✅ Edge data saved to {output} with {len(df)} rows.")

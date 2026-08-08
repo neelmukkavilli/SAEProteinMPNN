@@ -11,7 +11,7 @@ def main(args):
     import torch
     import os.path   
     from utils import worker_init_fn, get_pdbs, loader_pdb, build_training_clusters, PDB_dataset, StructureDataset, StructureLoader
-    from model_utils import featurize, loss_smoothed, loss_nll, SAE_loss, get_std_opt, ProteinMPNN, store_inputs_and_losses, reinit_anthropic, remove_parallel_grads, per_sample_SAE_loss, reinit_classic
+    from model_utils import featurize, loss_nll, SAE_loss, ProteinMPNN, store_inputs_and_losses, reinit_anthropic, remove_parallel_grads, reinit_classic
 
     sparse_weight, mse_weight, reinit_every_n_steps = args.sparse_weight, args.mse_weight, args.reinit_every_n_steps
     
@@ -139,7 +139,7 @@ def main(args):
                 reservoir_size = args.reservoir_size
             
             train_sparse_loss, train_mse_loss, train_specificity = 0, 0 ,0
-            for batch_idx, batch in enumerate(loader_train):
+            for _, batch in enumerate(loader_train):
                 count = 0
                 X, S, mask, lengths, chain_M, residue_idx, mask_self, chain_encoding_all = featurize(batch, device)
 
@@ -215,7 +215,7 @@ def main(args):
                             count = 0
             
                 # Calculate training loss
-                loss, loss_av, true_false = loss_nll(S, log_probs, mask_for_loss)
+                loss, _, true_false = loss_nll(S, log_probs, mask_for_loss)
                 train_sum += torch.sum(loss * mask_for_loss).cpu().data.numpy()
                 train_acc += torch.sum(true_false * mask_for_loss).cpu().data.numpy()
                 train_weights += torch.sum(mask_for_loss).cpu().data.numpy()
@@ -223,11 +223,11 @@ def main(args):
             model.eval()
             print("Reinit steps:", reinit_steps)
             with torch.no_grad():
-                validation_sum, validation_weights, valid_sparse_loss, valid_mse_loss, validation_norm_loss = 0., 0., 0., 0., 0.
+                validation_sum, validation_weights, valid_sparse_loss, valid_mse_loss = 0., 0., 0., 0.
                 validation_acc = 0.
                 valid_specificity = [0,0,0]
-                for batch_idx, batch in enumerate(loader_valid):
-                    X, S, mask, lengths, chain_M, residue_idx, mask_self, chain_encoding_all = featurize(batch, device)
+                for _, batch in enumerate(loader_valid):
+                    X, S, mask, _, chain_M, residue_idx, _, chain_encoding_all = featurize(batch, device)
                     log_probs, original, encoded, decoded = model(X, S, mask, chain_M, residue_idx, chain_encoding_all, args.SAE_level, args.reinsert_SAE)
                     
                     # Specificity is the average % of samples a neuron will activate for (# of samples > 0 / # of samples)
@@ -235,7 +235,7 @@ def main(args):
                         valid_specificity[i] += (torch.mean((model.encoded_act[i] > 0).float()) / len(loader_valid)).cpu().data.numpy()
 
                     mask_for_loss = mask*chain_M
-                    loss, loss_av, true_false = loss_nll(S, log_probs, mask_for_loss)
+                    loss, _, true_false = loss_nll(S, log_probs, mask_for_loss)
                     total_loss, sparse_loss, mse_loss = SAE_loss(model, sparse_weight, mask_for_loss.bool())
 
                     validation_sum += torch.sum(loss * mask_for_loss).cpu().data.numpy()
@@ -244,23 +244,6 @@ def main(args):
                     valid_sparse_loss += (torch.sum(sparse_loss * mask_for_loss).cpu().data.numpy() / len(loader_valid))
                     valid_mse_loss += (torch.sum(mse_loss * mask_for_loss).cpu().data.numpy() / len(loader_valid))
                     validation_accuracy = validation_acc / validation_weights
-                    #validation_norm_loss += torch.sum(loss_av_smoothed * mask_for_loss).cpu().data.numpy()
-            
-                '''
-                train_loss = train_sum / train_weights
-                train_accuracy = train_acc / train_weights
-                train_perplexity = np.exp(train_loss)
-                validation_loss = validation_sum / validation_weights
-                validation_accuracy = validation_acc / validation_weights
-                validation_perplexity = np.exp(validation_loss)
-
-                train_perplexity_ = np.format_float_positional(np.float32(train_perplexity), unique=False, precision=3)     
-                validation_perplexity_ = np.format_float_positional(np.float32(validation_perplexity), unique=False, precision=3)
-                train_accuracy_ = np.format_float_positional(np.float32(train_accuracy), unique=False, precision=3)
-                validation_accuracy_ = np.format_float_positional(np.float32(validation_accuracy), unique=False, precision=3)
-                epoch_activity_mask.zero_()
-                norm_loss_ = np.format_float_positional(np.float32(validation_norm_loss), unique=False, precision=3)
-                '''
 
             validation_accuracy_ = np.format_float_positional(np.float32(validation_accuracy), unique=False, precision=3)
             train_specificity_ = np.format_float_positional(np.float32(train_specificity.item()), unique=False, precision=3)

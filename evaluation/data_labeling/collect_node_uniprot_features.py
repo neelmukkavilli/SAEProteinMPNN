@@ -21,18 +21,12 @@ feature_types_pair = ['Disulfide bond', 'Cross-link']
 def match_resids(input, pdb_resid, uniprot_resid):
     indices = [i for i, v in enumerate(uniprot_resid) if int(v[5:]) == input]
     if len(indices) > 0:
-        #print("chain")
         pdb_residues = [pdb_resid[index] for index in indices]
         return pdb_residues, len(indices)
     if len(indices) == 0:
-        #print(input)
-        #print("Not in pdb chain")
         return None, None
 
 def build_per_residue_annotation(features, pdb_resid, uniprot_resid):
-    #pdb_resids = node_uniprot_features['']
-    #difference = pdb_resid[0] - uniprot_resid[0] # For mismatched residue numberings
-    
     per_residue = {}
     if features != "Not Found":
         for feat in features:
@@ -72,37 +66,8 @@ def build_per_residue_annotation(features, pdb_resid, uniprot_resid):
                      continue
     return per_residue
 
-folder_path = '/WAVE/bio/ML/SAE_train/SAEProteinMPNN/sae_training/evaluation/data_labeling/uniprot/out/'
-#node_features_path = '/WAVE/bio/ML/SAE_train/SAEProteinMPNN/sae_training/evaluation/node_features.csv'
-#node_ids= pd.read_csv(node_features_path, usecols=['identifier'])
-#pdb_ids = [str(i)[:3] for i in node_ids]
-#pdb_chains = [str(i)[3:4] for i in node_ids]
-#pdb_res_ids = [str(i)[4:] for i in node_ids]
-#node_uniprot_features = pd.DataFrame(columns=['uniprotlabel', 'uniprotresid'], index=node_ids)
+folder_path = 'uniprot/out/'
 
-'''
-# Take all the identifiers and find corresponding uniprot ids and their resids (sometimes different)
-for filename in os.listdir(folder_path):
-    file_path = str(os.path.join(folder_path, file_path))
-    with open(file_path, 'r') as file:
-        lines = file.readlines()
-        for line in lines:
-            try: # If the line isn't there or entries are missing
-                ids = line.split('\t')
-                pdb_id = str(ids[0])
-                chain = str(ids[1])
-                res_id = int(ids[3])
-                uniprot_id = str(ids[4])
-                uniprot_resid = str(ids[6])
-                if res_id != 'null' and ids[2] == ids[5]: # Check if amino acid is the same just in case
-                    try: # If residue doesn't exist in node features
-                        node_uniprot_features.loc[pdb_id+chain+res_id, 'uniprotlabel'] = uniprot_id
-                        node_uniprot_features.loc[pdb_id+chain+res_id, 'uniprotresid'] = uniprot_resid
-                    except:
-                        continue
-            except:
-                continue
-'''
 total_uniprot_features = pd.DataFrame()
 for filename in os.listdir(folder_path):
     pdb_resid = []
@@ -131,15 +96,5 @@ for filename in os.listdir(folder_path):
     total_uniprot_features = pd.concat([total_uniprot_features, uniprot_features])
 
     print(uniprot_features)
-output_path = '/WAVE/bio/ML/SAE_train/SAEProteinMPNN/sae_training/evaluation/uniprot_features.csv'
+output_path = '../created_data/features/uniprot_features.csv'
 total_uniprot_features.to_csv(output_path, mode='w', header = True)
-
-
-#for label in np.unique(node_uniprot_features['uniprotlabel']):
-#    features = get_uniprot_features(label)
-#    feature_dict = build_per_residue_annotation
-        
-        
-        
-        #if found != True:
-        #    uniprot_ids.append("Not Found")

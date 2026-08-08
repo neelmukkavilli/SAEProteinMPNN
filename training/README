@@ -1,27 +1,3 @@
-## Computers
-
-Personal computer: From your personal computer you will need to use ssh to use one of the following
-
-rainier/shasta: Local computers with access to folders on WAVE. Edit your files from here
-
-login node: Entry point into WAVE, do not run any programs here and only use to navigate elsewhere
-
-jupyter node: Access from https://jupyterhub.wave.scu.edu, if on your own account you will need to change the path_for_outputs parameter and create a directory to store log.txt. and model weight files
-The best jupyter notebook uses a V100 NVDIA GPU. Each GPU has different requirements for use so you will need to use the v100mlfold conda environment
-You can run commands using the jupyter terminal
-
-bio node: use srun_bio to get an interactive terminal and use similarly to the jupyter terminal.
-Uses an A16 NVIDIA GPU so use the a16mlfold conda environment
-
-## File locations
-
-Almost all important files are stored in /WAVE/bio/ML/SAE_train/SAEProteinMPNN/sae_training/ which can be accessed through either rainier/shasta computers or on WAVE
-
-Using WAVE you will have your own folder which you will use to store log.txt and model_weights 
-## CAUTION ## It is very easy to overwrite files during training so as soon as training finishes, store the model weights (epoch_epoch#.pt or epoch_last.pt) in their own folder with the corresponding log.txt file and its own README explaining what you changed and why. It is very important to do this for every run so we can recreate runs and don't lose track of files.
-
-Once you log in to WAVE you will start in your own personal folder and will have to navigate to WAVE/bio... to run scripts. 
-
 ## SAE model:
 
 Dense embeddings from the original model (input) are turned into sparse embeddings (encoded) and then reconverted into dense embeddings (output)
@@ -74,9 +50,3 @@ specificity: The average number of samples the average neuron activates for, low
 train_acc: Accuracy of the model based on training data, should not change through training unless reinsert_SAE = True
 
 valid_acc: Accuracy of the model based on evaluation data, should not change through training unless reinsert_SAE = True
-
-## Notes:
-
-Once you are set up, you can play around with changing hyperparameters as you wish just be sure to document your changes. Feel free to poke around the training.py and model_utils.py scripts to understand what's going on
-
-## If you have any trouble with SSH, refer to the google drive doc.

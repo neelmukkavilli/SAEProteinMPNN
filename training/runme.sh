@@ -8,7 +8,7 @@ python training.py \
 	--sparse_weight 0.001 \
 	--reinit_every_n_steps 5000 \
 	--reservoir_size 100000 \
-	--path_for_outputs "/WAVE/bio/ML/SAE_train/SAEProteinMPNN/sae_training/training/exp_020" \
+	--path_for_outputs "exp_020" \
 	--path_for_training_data "pdb_2021aug02_sample" \
 	--previous_checkpoint "model_weights/largeruns/reinit_class/llb1e-2/epoch_last.pt" \
 	--num_examples_per_epoch 10000 \
@@ -18,9 +18,5 @@ python training.py \
 # Reservoir size is multiplied to be 48 times larger for SAE_level = "edge"
 
 # Other arguments
-#	--reinsert_SAE True
-
-# Path for WAVE training 
-#	-- path_for_outputs "/WAVE/users2/unix/nmukkavilli/ProteinMPNN/sae_training/training/exp_020"
-# test
+# --reinsert_SAE True
 # --previous_checkpoint "model_weights/epoch_last.pt"
